@@ -1,0 +1,71 @@
+name:                blackmail
+version:             0.0.1.0
+github:              "typedrat/blackmail"
+license:             MPL-2.0
+author:              "Alexis Williams"
+maintainer:          "alexis@typedr.at"
+copyright:           "2018 Alexis Williams"
+
+extra-source-files:
+- README.md
+- ChangeLog.md
+
+# Metadata used when publishing your package
+synopsis:            Web-based, personal-use disposable email solution with both MUA and forwarding capabilities
+category:            Web
+
+# To avoid duplicated efforts in documentation and dealing with the
+# complications of embedding Haddock markup inside cabal files, it is
+# common to point users to the README.md file.
+description:         Please see the README on Github at <https://github.com/typedrat/blackmail#readme>
+
+dependencies:
+- base             >= 4.10 && < 5
+- bytestring       >= 0.10 && < 0.11
+- mono-traversable >= 1.0  && < 1.1
+- template-haskell >= 2.11 && < 2.13
+- attoparsec       >= 0.13 && < 0.14
+- monad-logger     >= 0.3  && < 0.4
+- lens             >= 4.15 && < 4.16
+- network          >= 2.6  && < 2.7
+- pipes            >= 4.3  && < 4.4
+- pipes-safe       >= 2.2  && < 2.3
+- pipes-network    >= 0.6  && < 0.7
+
+default-extensions:
+- DataKinds
+- FlexibleContexts
+- FlexibleInstances
+- KindSignatures
+- LiberalTypeSynonyms
+- OverloadedStrings
+- RankNTypes
+- TypeFamilies
+
+library:
+  source-dirs:
+  - src
+
+executables:
+  blackmail-exe:
+    main:                Main.hs
+    source-dirs:
+    - app
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - blackmail
+
+tests:
+  blackmail-test:
+    main:                Spec.hs
+    source-dirs:
+    - test
+    ghc-options:
+    - -threaded
+    - -rtsopts
+    - -with-rtsopts=-N
+    dependencies:
+    - blackmail
