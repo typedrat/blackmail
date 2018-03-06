@@ -32,17 +32,38 @@ dependencies:
 - pipes-safe       >= 2.2  && < 2.3
 - pipes-network    >= 0.6  && < 0.7
 
+# these are extra deps for the FSM thingy
+- mtl
+- fgl
+- graphviz
+- directory
+- filepath
+
 default-extensions:
 - DataKinds
+- DeriveLift
 - FlexibleContexts
 - FlexibleInstances
+- FunctionalDependencies
+- GADTs
+- GeneralizedNewtypeDeriving
 - KindSignatures
 - LiberalTypeSynonyms
+- MultiParamTypeClasses
 - OverloadedStrings
+- PolyKinds
 - RankNTypes
+- StandaloneDeriving
+- TemplateHaskell
 - TypeFamilies
+- TypeFamilyDependencies
+- UndecidableInstances
 
 library:
+  other-modules:
+  - Control.FSM.Monad.Internal
+  - Control.FSM.TH.Description
+  - Blackmail.SMTP.StateMachine.Types
   source-dirs:
   - src
 

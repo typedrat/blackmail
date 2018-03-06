@@ -1,4 +1,4 @@
-module Blackmail.SMTP.WireProtocol (ClientName, msgP, SMTPMsg(..), SMTPMsgId(..), SMTPMsgData(..), SMTPResponse(..), responseToText) where
+module Blackmail.SMTP.WireProtocol (heloP, ehloP, mailP, rcptP, dataP, rsetP, noopP, quitP, vrfyP, dataBodyP, SMTPResponse(..), responseToText) where
 
 import Control.Applicative
 import Data.Attoparsec.ByteString.Char8 as P hiding (skipSpace)
@@ -6,104 +6,60 @@ import qualified Data.ByteString.Char8 as BS
 import Data.Semigroup
 
 import Blackmail.SMTP.Address
+import Blackmail.SMTP.StateMachine.Types
 
 --
 
-type ClientName = BS.ByteString
+cmdP cmd p = stringCI cmd *> (p <* space `manyTill` endOfLine)
 
-data SMTPMsgId = HELO
-               | EHLO
+skipSpace :: Parser ()
+skipSpace = skipWhile (\c -> c == ' ' || c == '\t')
 
-               | MAIL
-               | RCPT
-               | DATA
+clientName :: Parser BS.ByteString
+clientName = P.takeWhile1 (not . isSpace)
 
-               | RSET
-               | NOOP
-               | QUIT
-               | VRFY
+arg :: Parser a -> Parser a
+arg p = skipSpace *> p <* skipSpace
 
-               | Unknown
-               | Invalid
+argL :: BS.ByteString -> Parser BS.ByteString
+argL s = arg $ stringCI s
 
-data family SMTPMsgData (a :: SMTPMsgId)
+heloP :: Parser (SMTPEventData HELO)
+heloP = cmdP "HELO" $ HELOData <$> arg clientName
 
-data instance SMTPMsgData HELO = HELOData ClientName
-                               deriving (Show)
-data instance SMTPMsgData EHLO = EHLOData ClientName
-                               deriving (Show)
+ehloP :: Parser (SMTPEventData EHLO)
+ehloP = cmdP "EHLO" $ EHLOData <$> arg clientName
 
-data instance SMTPMsgData MAIL = MAILData (Maybe Address)
-                               deriving (Show)
-data instance SMTPMsgData RCPT = RCPTData Address
-                               deriving (Show)
-data instance SMTPMsgData DATA = DATAData
-                               deriving (Show)
+mailP :: Parser (SMTPEventData MAIL)
+mailP = cmdP "MAIL" $ argL "FROM:"
+                   *> arg (fmap (MAILData . Just) addressP <|> (MAILData Nothing) <$ string "<>")
+                   -- I'm not going to do Q-P conversion, but I have to pretend I care
+                   <* optional (stringCI "BODY=7BIT" <|> stringCI "BODY=8BITMIME")
 
-data instance SMTPMsgData VRFY = VRFYData
-                               deriving (Show)
-data instance SMTPMsgData NOOP = NOOPData
-                               deriving (Show)
-data instance SMTPMsgData RSET = RSETData
-                               deriving (Show)
-data instance SMTPMsgData QUIT = QUITData
-                               deriving (Show)
+rcptP :: Parser (SMTPEventData RCPT)
+rcptP = cmdP "RCPT" $ argL "TO:"
+                   *> arg (RCPTData <$> addressP)
 
-data instance SMTPMsgData Unknown = UnknownData BS.ByteString
-                                  deriving (Show)
-data instance SMTPMsgData Invalid = InvalidData
-                                  deriving (Show)
+dataP :: Parser (SMTPEventData DATA)
+dataP = cmdP "DATA" $ pure (DATAData)
 
-data SMTPMsg = HELO_ (SMTPMsgData HELO)
-             | EHLO_ (SMTPMsgData EHLO)
-             | MAIL_ (SMTPMsgData MAIL)
-             | RCPT_ (SMTPMsgData RCPT)
-             | DATA_ (SMTPMsgData DATA)
-             | VRFY_ (SMTPMsgData VRFY)
-             | NOOP_ (SMTPMsgData NOOP)
-             | RSET_ (SMTPMsgData RSET)
-             | QUIT_ (SMTPMsgData QUIT)
-             | Unknown_ (SMTPMsgData Unknown)
-             | Invalid_ (SMTPMsgData Invalid)
-             deriving (Show)
+rsetP :: Parser (SMTPEventData RSET)
+rsetP = cmdP "RSET" $ pure (RSETData)
 
-msgP :: Parser SMTPMsg
-msgP = heloP <|> ehloP <|> mailP <|> rcptP <|> dataP <|> rsetP <|> noopP <|> quitP <|> vrfyP <|> unknownP
-    where
-        cmdP :: BS.ByteString -> Parser SMTPMsg -> Parser SMTPMsg
-        cmdP cmd p = stringCI cmd *> ((p <* space `manyTill` endOfLine) <|> (Invalid_ InvalidData <$ anyChar `manyTill` endOfLine))
+noopP :: Parser (SMTPEventData NOOP)
+noopP = cmdP "NOOP" $ pure (NOOPData)
 
-        skipSpace :: Parser ()
-        skipSpace = skipWhile (\c -> c == ' ' || c == '\t')
+quitP :: Parser (SMTPEventData QUIT)
+quitP = cmdP "QUIT" $ pure (QUITData)
 
-        clientName :: Parser ClientName
-        clientName = P.takeWhile1 (not . isSpace)
+vrfyP :: Parser (SMTPEventData VRFY)
+-- Why are we parsing an argument and discarding it?
+--
+-- VRFY is so dumb that it's worth ensuring it can't be implemented by mistake.
+vrfyP = cmdP "VRFY" $ VRFYData <$ arg clientName
 
-        arg :: Parser a -> Parser a
-        arg p = skipSpace *> p <* skipSpace
-
-        argL :: BS.ByteString -> Parser BS.ByteString
-        argL s = arg $ stringCI s
-
-        heloP, ehloP, mailP, rcptP, dataP, rsetP, noopP, quitP, vrfyP, unknownP :: Parser SMTPMsg
-        heloP = cmdP "HELO" $ HELO_ . HELOData <$> arg clientName
-        ehloP = cmdP "EHLO" $ EHLO_ . EHLOData <$> arg clientName
-        mailP = cmdP "MAIL" $ argL "FROM:"
-                           *> arg (fmap (MAIL_ . MAILData . Just) addressP <|> MAIL_ (MAILData Nothing) <$ string "<>")
-                           -- I'm not going to do Q-P conversion, but I have to pretend I care
-                           <* optional (stringCI "BODY=7BIT" <|> stringCI "BODY=8BITMIME")
-        rcptP = cmdP "RCPT" $ argL "TO:"
-                           *> arg (RCPT_ . RCPTData <$> addressP)
-        dataP = cmdP "DATA" $ pure (DATA_ DATAData)
-        rsetP = cmdP "RSET" $ pure (RSET_ RSETData)
-        noopP = cmdP "NOOP" $ pure (NOOP_ NOOPData)
-        quitP = cmdP "QUIT" $ pure (QUIT_ QUITData)
-        -- Why are we parsing an argument and discarding it?
-        --
-        -- VRFY is so dumb that it's worth ensuring it can't be implemented by mistake.
-        vrfyP = cmdP "VRFY" $ VRFY_ VRFYData <$ arg clientName
-
-        unknownP = Unknown_ . UnknownData <$> P.take 4 <* anyChar `manyTill` endOfLine
+dataBodyP :: Parser (SMTPEventData DATABody)
+dataBodyP = DATABodyData . BS.unlines <$> P.takeTill (\c -> c == '\r' || c == '\n') `manyTill` (endOfLine *> char '.' *> endOfLine)
 
 --
 
