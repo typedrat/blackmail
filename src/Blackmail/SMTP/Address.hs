@@ -3,7 +3,6 @@ module Blackmail.SMTP.Address (Address(..), addressP) where
 import Control.Applicative
 import Data.Attoparsec.ByteString.Char8 as P
 import qualified Data.ByteString.Char8 as BS
-import qualified Data.Sequences as O
 
 -- There's no support for routes. UUCP and non-resolvable hosts are deep in the ground by now.
 -- Likewise, if it fails to receive mail from a client that has flagrant,
@@ -29,7 +28,7 @@ addressP = char '<' *> skipRoute *> ((\m _ d -> Address m d) <$> mailbox <*> cha
             | otherwise                   = Just (char, False)
 
         mboxDecode :: BS.ByteString -> BS.ByteString
-        mboxDecode = O.filter (\c -> c /= 0x5C && c /= 0x22) -- 0x5C = backspace, 0x22 = double quote
+        mboxDecode = BS.filter (\c -> c /= '\x5c' && c /= '"') -- 0x5C = backspace
 
         mailbox, domain :: Parser BS.ByteString
         mailbox = mboxDecode <$> scan ('\0', False) mboxScan
