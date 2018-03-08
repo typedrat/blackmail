@@ -1,5 +1,4 @@
-{-# LANGUAGE TypeInType #-}
-module Control.FSM.Monad.Internal (MachineT(..), runMachineT, EventIdKind, StateIdKind, FSM(..), FSMValidTransition(..), MonadFSM(..)) where
+module Control.FSM.Monad.Internal (MachineT(..), runMachineT, EventIdKind, StateIdKind, FSM(..), FSMValidTransition(..), MonadFSM(withMachineState, doTransition)) where
 
 import Control.Applicative
 import Control.Monad.Except
@@ -57,12 +56,21 @@ class FSM mach where
 class FSMValidTransition (mach :: machine) (from :: state) (via :: event) (to :: state)
 
 class (FSM mach, Monad m) => MonadFSM mach m | m -> mach where
-    withMachineState :: (StateType mach -> a) -> m a
+    getMachineState :: m (StateType mach)
+    default getMachineState :: (MonadFSM mach n, MonadTrans t, m ~ t n) => m (StateType mach)
+    getMachineState = lift getMachineState
+
+    putMachineState :: StateType mach -> m ()
+    default putMachineState :: (MonadFSM mach n, MonadTrans t, m ~ t n) => StateType mach -> m ()
+    putMachineState = lift . putMachineState
+
+
+    withMachineState :: (StateType mach -> m a) -> m a
+    withMachineState = (getMachineState >>=)
+
     doTransition :: (FSMValidTransition mach from via to) => (StateType' mach from -> EventType' mach via -> m (StateType' mach to)) -> StateType' mach from -> EventType' mach via -> m ()
+    doTransition action from via = putMachineState . wrapState =<< action from via
 
 instance (FSM mach, Monad m) => MonadFSM mach (MachineT mach m) where
-    withMachineState f = f <$> MachineT get
-
-    doTransition action from via = do
-        to <- action from via
-        MachineT $ put (wrapState to)
+    getMachineState = MachineT get
+    putMachineState = MachineT . put
