@@ -176,7 +176,7 @@ reifyFSM machine@(Machine mach gr) = do
                 Just (FSMNode to   _ _) = lookup toId nodes
                 toN = mkName to
 
-    return ([machineT] ++ stateTy ++ eventTy ++ optics ++ (validTrans <$> nub edges) ++ instDecl )
+    return ([machineT] ++ stateTy ++ eventTy ++ optics ++ (validTrans <$> nub edges) ++ instDecl)
 
 -- | Generates the wide variety of types and type class instances that are required to fully define the function of the FSM.
 makeFSMTypes :: String -> DefnM a -> Q [Dec]

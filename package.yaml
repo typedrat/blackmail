@@ -62,7 +62,6 @@ default-extensions:
 
 library:
   other-modules:
-  - Control.FSM.Monad.Internal
   - Control.FSM.TH.Description
   - Blackmail.SMTP.StateMachine.Types
   source-dirs:
