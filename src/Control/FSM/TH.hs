@@ -13,7 +13,6 @@ import Data.Foldable (foldl')
 import Data.List (elemIndex, nub, nubBy)
 import Data.Proxy
 import Language.Haskell.TH
-import Language.Haskell.TH.Liftable
 import qualified Language.Haskell.TH.Syntax as TH
 import System.Directory (doesDirectoryExist, doesFileExist,
                          getDirectoryContents, canonicalizePath)
@@ -31,8 +30,10 @@ makeStateType (Machine name graph) = do
         idCons = flip NormalC [] <$> stateNames
         idTy = DataD [] idTypeName [] Nothing idCons []
 
+        stateIdKindInst = TySynInstD ''StateIdKind (TySynEqn [ConT (mkName name)] (ConT idTypeName))
+
     -- Make the actual core state type, parameterized by the state ID.
-    idTvName <- newName "state"
+    idName <- newName "state"
 
     let dataTyName = mkName (name ++ "StateData")
 
@@ -40,7 +41,7 @@ makeStateType (Machine name graph) = do
         attrToField (FSMAttribute _ ty) = (plainBang, ty)
         stateToCon (FSMNode state attrs _) = GadtC [mkName $ state ++ "Data"] (attrToField <$> attrs) (AppT (ConT dataTyName) (PromotedT $ mkName state))
 
-        dataTy = DataD [] dataTyName [KindedTV idTvName (ConT idTypeName)] Nothing (stateToCon <$> states) []
+        dataTy = DataD [] dataTyName [KindedTV idName (ConT idTypeName)] Nothing (stateToCon <$> states) []
 
     -- Make the type that wraps the safe states
         stateConF name = NormalC (mkName $ nameBase name ++ "_") [(plainBang, AppT (ConT dataTyName) (PromotedT name))]
@@ -48,8 +49,13 @@ makeStateType (Machine name graph) = do
 
     [stateType'] <- [d| type instance StateType' $(conT $ mkName name) = $(conT dataTyName) |]
     let initialState' = ValD (VarP 'initialState) (NormalB (AppE (ConE (mkName "Initial_")) (ConE (mkName "InitialData")))) []
+        wrapStateClauses = \(FSMNode name attrs _) -> Clause
+            [AsP idName (ConP (mkName $ name ++ "Data") (replicate (length attrs) WildP))]
+            (NormalB $ AppE (ConE (mkName $ name ++ "_")) (VarE idName))
+            []
+        wrapState' = FunD 'wrapState (wrapStateClauses <$> states)
 
-    return ([idTy, dataTy], [stateType', stateFamInst, initialState'])
+    return ([idTy, stateIdKindInst, dataTy], [stateType', stateFamInst, initialState', wrapState'])
 
 makeEventType :: Machine -> Q ([Dec], [Dec])
 makeEventType (Machine name graph) = do
@@ -60,8 +66,10 @@ makeEventType (Machine name graph) = do
         idCons = flip NormalC [] <$> eventNames
         idTy = DataD [] idTypeName [] Nothing idCons []
 
+        eventIdKindInst = TySynInstD ''EventIdKind (TySynEqn [ConT (mkName name)] (ConT idTypeName))
+
     -- Make the actual core event type, parameterized by the state ID.
-    idTvName <- newName "event"
+    idName <- newName "event"
 
     let dataTyName = mkName (name ++ "EventData")
 
@@ -69,7 +77,7 @@ makeEventType (Machine name graph) = do
         attrToField (FSMAttribute _ ty) = (plainBang, ty)
         eventToCon (FSMEvent event attrs) = GadtC [mkName $ event ++ "Data"] (attrToField <$> attrs) (AppT (ConT dataTyName) (PromotedT $ mkName event))
 
-        dataTy = DataD [] dataTyName [KindedTV idTvName (ConT idTypeName)] Nothing (eventToCon <$> events) []
+        dataTy = DataD [] dataTyName [KindedTV idName (ConT idTypeName)] Nothing (eventToCon <$> events) []
 
     -- Make the type that wraps the safe events
         eventConF name = NormalC (mkName $ nameBase name ++ "_") [(plainBang, AppT (ConT dataTyName) (PromotedT name))]
@@ -77,7 +85,13 @@ makeEventType (Machine name graph) = do
 
     [eventType'] <- [d| type instance EventType' $(conT $ mkName name) = $(conT dataTyName) |]
 
-    return ([idTy, dataTy], [eventType', eventFamInst])
+    let wrapEventClauses = \(FSMEvent name attrs) -> Clause
+            [AsP idName (ConP (mkName $ name ++ "Data") (replicate (length attrs) WildP))]
+            (NormalB $ AppE (ConE (mkName $ name ++ "_")) (VarE idName))
+            []
+        wrapEvent' = FunD 'wrapEvent (wrapEventClauses <$> events)
+
+    return ([idTy, eventIdKindInst, dataTy], [eventType', eventFamInst, wrapEvent'])
 
 makeOptics :: Machine -> Q [Dec]
 makeOptics (Machine name graph) = do
@@ -152,30 +166,8 @@ reifyFSM machine@(Machine mach gr) = do
     stateN <- newName "state"
     let nodes = labNodes gr
         edges = labEdges gr
-        edgeToMatch (fromId, toId, (FSMEvent via _)) = do
-            fromN <- newName "from"
-            toN <- newName "to"
-            viaN <- newName "via"
-            let Just (FSMNode from _ _) = lookup fromId nodes
-                from' = from ++ "_"
-                fromP = ConP (mkName from') [VarP fromN]
-                Just (FSMNode to   _ _) = lookup toId nodes
-                to' = to ++ "_"
-                via' = via ++ "_"
-                viaP = ConP (mkName via') [VarP viaN]
-            return $ Match (TupP [fromP, viaP]) (NormalB $ AppE (AppE (VarE 'fmap) (ConE . mkName $ to')) (AppE (AppE (VarE 'doTransition) (VarE fromN)) (VarE viaN))) []
-        caseEvent = LamE [VarP stateN, VarP eventN] . CaseE (TupE [VarE stateN, VarE eventN]) <$> mapM edgeToMatch edges
 
-    pumpE <- [e| \event -> do
-        state <- MachineT get
-        state' <- MachineT $ lift ($caseEvent state event)
-        MachineT $ put state'
-        |]
-
-    let pumpD = ValD (VarP 'pump) (NormalB pumpE) []
-
-    instDecl <- TH.lift $ (return [InstanceD Nothing [] (AppT (ConT ''FSM) (ConT machineN)) ( {- pumpD : -} stateClsMems ++ eventClsMems )] :: DecsQ)
-    let instSplice = ValD (VarP . mkName $ "make" ++ mach ++ "FSMInstance") (NormalB instDecl) []
+    let instDecl = [InstanceD Nothing [] (AppT (ConT ''FSM) (ConT machineN)) (stateClsMems ++ eventClsMems)]
         validTrans (fromId, toId, (FSMEvent via _)) = InstanceD Nothing [] (AppT (AppT (AppT (AppT (ConT ''FSMValidTransition) (ConT machineN)) (PromotedT fromN)) (PromotedT viaN)) (PromotedT toN)) []
             where
                 viaN = mkName via
@@ -184,7 +176,7 @@ reifyFSM machine@(Machine mach gr) = do
                 Just (FSMNode to   _ _) = lookup toId nodes
                 toN = mkName to
 
-    return ([machineT] ++ stateTy ++ eventTy ++ optics ++ (validTrans <$> nub edges) ++ [instSplice] )
+    return ([machineT] ++ stateTy ++ eventTy ++ optics ++ (validTrans <$> nub edges) ++ instDecl )
 
 -- | Generates the wide variety of types and type class instances that are required to fully define the function of the FSM.
 makeFSMTypes :: String -> DefnM a -> Q [Dec]

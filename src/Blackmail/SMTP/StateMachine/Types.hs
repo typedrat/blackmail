@@ -1,4 +1,4 @@
-module Blackmail.SMTP.StateMachine.Types (SMTP(..), SMTPStateId(..), SMTPStateData(..), SMTPEventId(..), SMTPEventData(..), EventType(..), SMTPHasClientName(..), SMTPHasSender(..), SMTPHasRecipients(..), SMTPHasRecipient(..), SMTPHasBody(..), makeSMTPFSMInstance) where
+module Blackmail.SMTP.StateMachine.Types (SMTP(..), SMTPStateId(..), SMTPStateData(..), StateType(..), SMTPEventId(..), SMTPEventData(..), EventType(..), SMTPHasClientName(..), SMTPHasSender(..), SMTPHasRecipients(..), SMTPHasRecipient(..), SMTPHasBody(..)) where
 
 import Control.FSM.TH
 import Control.FSM.Monad
@@ -47,6 +47,3 @@ makeFSMTypes "SMTP" $ do
 
     noop <- event "NOOP" (return ())
     mapM_ (\x -> transition x noop x) [initial, greeted, hasSender, hasRecipients]
-
-instance EffectfulFSM SMTP where
-    type EffectMonad SMTP = IO

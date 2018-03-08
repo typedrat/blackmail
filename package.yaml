@@ -40,6 +40,7 @@ dependencies:
 
 default-extensions:
 - DataKinds
+- DefaultSignatures
 - DeriveLift
 - FlexibleContexts
 - FlexibleInstances
@@ -56,6 +57,7 @@ default-extensions:
 - TemplateHaskell
 - TypeFamilies
 - TypeFamilyDependencies
+- TypeInType
 - UndecidableInstances
 
 library:
