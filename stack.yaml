@@ -38,6 +38,8 @@ resolver: lts-10.6
 packages:
 - .
 - location:
+    git: git@github.com:typedrat/megaparsec.git
+    commit: c679d32ebe6d97db3a0c30c95d85c34f0d95b295
   extra-dep: true
 # Dependency packages to be pulled from upstream that are not in the resolver
 # (e.g., acme-missiles-0.3)

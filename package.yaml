@@ -22,8 +22,9 @@ description:         Please see the README on Github at <https://github.com/type
 dependencies:
 - base             >= 4.10 && < 5
 - bytestring       >= 0.10 && < 0.11
+- text
 - template-haskell >= 2.11 && < 2.13
-- attoparsec       >= 0.13 && < 0.14
+- megaparsec       >= 6.4  && < 6.5
 - monad-logger     >= 0.3  && < 0.4
 - lens             >= 4.15 && < 4.16
 - network          >= 2.6  && < 2.7

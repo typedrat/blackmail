@@ -1,65 +1,72 @@
-module Blackmail.SMTP.WireProtocol (heloP, ehloP, mailP, rcptP, dataP, rsetP, noopP, quitP, vrfyP, dataBodyP, SMTPResponse(..), responseToText) where
+module Blackmail.SMTP.WireProtocol (commandP, dataBodyP, SMTPResponse(..), responseToText) where
 
 import Control.Applicative
-import Data.Attoparsec.ByteString.Char8 as P hiding (skipSpace)
+import Control.FSM.Monad
 import qualified Data.ByteString.Char8 as BS
+import Data.Char
 import Data.Semigroup
+import Text.Megaparsec
+import Text.Megaparsec.Byte
 
 import Blackmail.SMTP.Address
 import Blackmail.SMTP.StateMachine.Types
 
 --
 
-cmdP cmd p = stringCI cmd *> (p <* space `manyTill` endOfLine)
+commandP :: (MonadParsec e BS.ByteString m) => m (EventType SMTP)
+commandP = (HELO_ <$> heloP) <|> (EHLO_ <$> ehloP) <|> (MAIL_ <$> mailP) <|> (RCPT_ <$> rcptP) <|> (RSET_ <$> rsetP) <|> (NOOP_ <$> noopP) <|> (QUIT_ <$> quitP) <|> (VRFY_ <$> vrfyP)
+    where
+        cmdP :: (MonadParsec e BS.ByteString m) => BS.ByteString -> m a -> m a
+        cmdP cmd p = string' cmd *> (p <* space `manyTill` eol)
 
-skipSpace :: Parser ()
-skipSpace = skipWhile (\c -> c == ' ' || c == '\t')
+        skipHorizontalSpace :: (MonadParsec e BS.ByteString m) => m ()
+        skipHorizontalSpace = () <$ takeWhileP Nothing (\c -> c == 0x20 || c == 0x09)
 
-clientName :: Parser BS.ByteString
-clientName = P.takeWhile1 (not . isSpace)
+        clientName :: (MonadParsec e BS.ByteString m) => m BS.ByteString
+        clientName = takeWhile1P Nothing (\c -> c > 0x20 && c /= 0x7F)
 
-arg :: Parser a -> Parser a
-arg p = skipSpace *> p <* skipSpace
+        arg :: (MonadParsec e BS.ByteString m) => m a -> m a
+        arg p = skipHorizontalSpace *> p <* skipHorizontalSpace
 
-argL :: BS.ByteString -> Parser BS.ByteString
-argL s = arg $ stringCI s
+        argL :: (MonadParsec e BS.ByteString m) => BS.ByteString -> m BS.ByteString
+        argL s = arg $ string' s
 
-heloP :: Parser (SMTPEventData HELO)
-heloP = cmdP "HELO" $ HELOData <$> arg clientName
+        heloP :: (MonadParsec e BS.ByteString m) => m (SMTPEventData HELO)
+        heloP = cmdP "HELO" $ HELOData <$> arg clientName
 
-ehloP :: Parser (SMTPEventData EHLO)
-ehloP = cmdP "EHLO" $ EHLOData <$> arg clientName
+        ehloP :: (MonadParsec e BS.ByteString m) => m (SMTPEventData EHLO)
+        ehloP = cmdP "EHLO" $ EHLOData <$> arg clientName
 
-mailP :: Parser (SMTPEventData MAIL)
-mailP = cmdP "MAIL" $ argL "FROM:"
-                   *> arg (fmap (MAILData . Just) addressP <|> (MAILData Nothing) <$ string "<>")
-                   -- I'm not going to do Q-P conversion, but I have to pretend I care
-                   <* optional (stringCI "BODY=7BIT" <|> stringCI "BODY=8BITMIME")
+        mailP :: (MonadParsec e BS.ByteString m) => m (SMTPEventData MAIL)
+        mailP = cmdP "MAIL" $ argL "FROM:"
+                           *> arg (fmap (MAILData . Just) addressP <|> MAILData Nothing <$ string "<>")
+                           -- I'm not going to do Q-P conversion, but I have to pretend I care
+                           <* optional (string' "BODY=7BIT" <|> string' "BODY=8BITMIME")
 
-rcptP :: Parser (SMTPEventData RCPT)
-rcptP = cmdP "RCPT" $ argL "TO:"
-                   *> arg (RCPTData <$> addressP)
+        rcptP :: (MonadParsec e BS.ByteString m) => m (SMTPEventData RCPT)
+        rcptP = cmdP "RCPT" $ argL "TO:"
+                           *> arg (RCPTData <$> addressP)
 
-dataP :: Parser (SMTPEventData DATA)
-dataP = cmdP "DATA" $ pure (DATAData)
+        dataP :: (MonadParsec e BS.ByteString m) => m (SMTPEventData DATA)
+        dataP = cmdP "DATA" $ pure DATAData
 
-rsetP :: Parser (SMTPEventData RSET)
-rsetP = cmdP "RSET" $ pure (RSETData)
+        rsetP :: (MonadParsec e BS.ByteString m) => m (SMTPEventData RSET)
+        rsetP = cmdP "RSET" $ pure RSETData
 
-noopP :: Parser (SMTPEventData NOOP)
-noopP = cmdP "NOOP" $ pure (NOOPData)
+        noopP :: (MonadParsec e BS.ByteString m) => m (SMTPEventData NOOP)
+        noopP = cmdP "NOOP" $ pure NOOPData
 
-quitP :: Parser (SMTPEventData QUIT)
-quitP = cmdP "QUIT" $ pure (QUITData)
+        quitP :: (MonadParsec e BS.ByteString m) => m (SMTPEventData QUIT)
+        quitP = cmdP "QUIT" $ pure QUITData
 
-vrfyP :: Parser (SMTPEventData VRFY)
--- Why are we parsing an argument and discarding it?
---
--- VRFY is so dumb that it's worth ensuring it can't be implemented by mistake.
-vrfyP = cmdP "VRFY" $ VRFYData <$ arg clientName
+        -- | Why are we parsing an argument and discarding it?
+        --
+        -- VRFY is so dumb that it's worth ensuring it can't be implemented by mistake.
+        vrfyP :: (MonadParsec e BS.ByteString m) => m (SMTPEventData VRFY)
+        vrfyP = cmdP "VRFY" $ VRFYData <$ arg clientName
 
-dataBodyP :: Parser (SMTPEventData DATABody)
-dataBodyP = DATABodyData . BS.unlines <$> P.takeTill (\c -> c == '\r' || c == '\n') `manyTill` (endOfLine *> char '.' *> endOfLine)
+dataBodyP :: (MonadParsec e BS.ByteString m) => m (EventType SMTP)
+dataBodyP = DATABody_ . DATABodyData . BS.unlines <$> takeWhileP (Just "message body") (\c -> c /= 0x0D && c /= 0x0A) `manyTill` (eol *> char 0x2E *> eol)
 
 --
 
