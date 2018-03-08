@@ -28,7 +28,7 @@ addressP = char '<' *> skipRoute *> ((\m _ d -> Address m d) <$> mailbox <*> cha
             | otherwise                   = Just (char, False)
 
         mboxDecode :: BS.ByteString -> BS.ByteString
-        mboxDecode = BS.filter (\c -> c /= '\x5c' && c /= '"') -- 0x5C = backspace
+        mboxDecode = BS.filter (\c -> c /= '\\' && c /= '"')
 
         mailbox, domain :: Parser BS.ByteString
         mailbox = mboxDecode <$> scan ('\0', False) mboxScan
