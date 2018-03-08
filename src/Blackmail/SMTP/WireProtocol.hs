@@ -1,6 +1,7 @@
-module Blackmail.SMTP.WireProtocol (heloP, ehloP, mailP, rcptP, dataP, rsetP, noopP, quitP, vrfyP, dataBodyP, SMTPResponse(..), responseToText) where
+module Blackmail.SMTP.WireProtocol (msgP, dataBodyP, SMTPResponse(..), responseToText) where
 
 import Control.Applicative
+import Control.FSM.Monad
 import Data.Attoparsec.ByteString.Char8 as P hiding (skipSpace)
 import qualified Data.ByteString.Char8 as BS
 import Data.Semigroup
@@ -10,53 +11,44 @@ import Blackmail.SMTP.StateMachine.Types
 
 --
 
-cmdP cmd p = stringCI cmd *> (p <* space `manyTill` endOfLine)
+msgP :: Parser (EventType SMTP)
+msgP = heloP <|> ehloP <|> mailP <|> rcptP <|> dataP <|> rsetP <|> noopP <|> quitP <|> vrfyP <|> unknownP
+    where
+        cmdP :: BS.ByteString -> Parser (EventType SMTP) -> Parser (EventType SMTP)
+        cmdP cmd p = stringCI cmd *> ((p <* space `manyTill` endOfLine) <|> (Invalid_ InvalidData <$ anyChar `manyTill` endOfLine))
 
-skipSpace :: Parser ()
-skipSpace = skipWhile (\c -> c == ' ' || c == '\t')
+        skipSpace :: Parser ()
+        skipSpace = skipWhile (\c -> c == ' ' || c == '\t')
 
-clientName :: Parser BS.ByteString
-clientName = P.takeWhile1 (not . isSpace)
+        clientName :: Parser BS.ByteString
+        clientName = P.takeWhile1 (not . isSpace)
 
-arg :: Parser a -> Parser a
-arg p = skipSpace *> p <* skipSpace
+        arg :: Parser a -> Parser a
+        arg p = skipSpace *> p <* skipSpace
 
-argL :: BS.ByteString -> Parser BS.ByteString
-argL s = arg $ stringCI s
+        argL :: BS.ByteString -> Parser BS.ByteString
+        argL s = arg $ stringCI s
 
-heloP :: Parser (SMTPEventData HELO)
-heloP = cmdP "HELO" $ HELOData <$> arg clientName
+        heloP, ehloP, mailP, rcptP, dataP, rsetP, noopP, quitP, vrfyP, unknownP :: Parser (EventType SMTP)
+        heloP = cmdP "HELO" $ HELO_ . HELOData <$> arg clientName
+        ehloP = cmdP "EHLO" $ EHLO_ . EHLOData <$> arg clientName
+        mailP = cmdP "MAIL" $ argL "FROM:"
+                           *> arg (fmap (MAIL_ . MAILData . Just) addressP <|> MAIL_ (MAILData Nothing) <$ string "<>")
+                           -- I'm not going to do Q-P conversion, but I have to pretend I care
+                           <* optional (stringCI "BODY=7BIT" <|> stringCI "BODY=8BITMIME")
+        rcptP = cmdP "RCPT" $ argL "TO:"
+                           *> arg (RCPT_ . RCPTData <$> addressP)
+        dataP = cmdP "DATA" $ pure (DATA_ DATAData)
+        rsetP = cmdP "RSET" $ pure (RSET_ RSETData)
+        noopP = cmdP "NOOP" $ pure (NOOP_ NOOPData)
+        quitP = cmdP "QUIT" $ pure (QUIT_ QUITData)
+        -- Why are we parsing an argument and discarding it?
+        --
+        -- VRFY is so dumb that it's worth ensuring it can't be implemented by mistake.
+        vrfyP = cmdP "VRFY" $ VRFY_ VRFYData <$ arg clientName
 
-ehloP :: Parser (SMTPEventData EHLO)
-ehloP = cmdP "EHLO" $ EHLOData <$> arg clientName
+        unknownP = Unknown_ . UnknownData <$> P.take 4 <* anyChar `manyTill` endOfLine
 
-mailP :: Parser (SMTPEventData MAIL)
-mailP = cmdP "MAIL" $ argL "FROM:"
-                   *> arg (fmap (MAILData . Just) addressP <|> (MAILData Nothing) <$ string "<>")
-                   -- I'm not going to do Q-P conversion, but I have to pretend I care
-                   <* optional (stringCI "BODY=7BIT" <|> stringCI "BODY=8BITMIME")
-
-rcptP :: Parser (SMTPEventData RCPT)
-rcptP = cmdP "RCPT" $ argL "TO:"
-                   *> arg (RCPTData <$> addressP)
-
-dataP :: Parser (SMTPEventData DATA)
-dataP = cmdP "DATA" $ pure (DATAData)
-
-rsetP :: Parser (SMTPEventData RSET)
-rsetP = cmdP "RSET" $ pure (RSETData)
-
-noopP :: Parser (SMTPEventData NOOP)
-noopP = cmdP "NOOP" $ pure (NOOPData)
-
-quitP :: Parser (SMTPEventData QUIT)
-quitP = cmdP "QUIT" $ pure (QUITData)
-
-vrfyP :: Parser (SMTPEventData VRFY)
--- Why are we parsing an argument and discarding it?
---
--- VRFY is so dumb that it's worth ensuring it can't be implemented by mistake.
-vrfyP = cmdP "VRFY" $ VRFYData <$ arg clientName
 
 dataBodyP :: Parser (SMTPEventData DATABody)
 dataBodyP = DATABodyData . BS.unlines <$> P.takeTill (\c -> c == '\r' || c == '\n') `manyTill` (endOfLine *> char '.' *> endOfLine)

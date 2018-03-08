@@ -47,3 +47,9 @@ makeFSMTypes "SMTP" $ do
 
     noop <- event "NOOP" (return ())
     mapM_ (\x -> transition x noop x) [initial, greeted, hasSender, hasRecipients]
+
+    unknown <- event "Unknown" (attrib "unknownCmd" [t| BS.ByteString |])
+    mapM_ (\x -> transition x unknown x) [initial, greeted, hasSender, hasRecipients]
+
+    invalid <- event "Invalid" (return ())
+    mapM_ (\x -> transition x invalid x) [initial, greeted, hasSender, hasRecipients]
