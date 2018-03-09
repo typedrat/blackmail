@@ -1,20 +1,27 @@
-module Control.FSM.Monad.Internal (MachineT(..), runMachineT, EventIdKind, StateIdKind, FSM(..), FSMValidTransition(..), MonadFSM(..)) where
+module Control.FSM.Monad.Internal (MachineT(..), runMachineT, evalMachineT, EventIdKind, StateIdKind, FSM(..), FSMValidTransition(..), MonadFSM(..)) where
 
 import Control.Applicative
+import Control.Monad.Catch
 import Control.Monad.Except
-import Control.Monad.Reader.Class
-import Control.Monad.Writer.Class
-import Control.Monad.State
+import Control.Monad.IO.Class
+import Control.Monad.Reader
+import Control.Monad.Writer
+import Control.Monad.State.Class
+import qualified Control.Monad.State.Strict as SS
+import qualified Control.Monad.State.Lazy as SL
 import Data.Kind
 import GHC.TypeLits
 
 -- | This monad transformer wraps the effect monad @m@ that the FSM @mach@ uses. For 'mtl' style code, you'll have to derive any other instances you need.
-newtype MachineT mach m a = MachineT { unMachineT :: StateT (StateType mach) m a }
+newtype MachineT mach m a = MachineT { unMachineT :: SS.StateT (StateType mach) m a }
                           deriving (Functor, Applicative, Alternative, Monad, MonadPlus, MonadTrans)
 
 -- | This converts the 'MachineT' representation of a state machine's actions into a monadic action in the effect monad.
 runMachineT :: (FSM mach) => MachineT mach m a -> m (a, StateType mach)
-runMachineT m = runStateT (unMachineT m) initialState
+runMachineT m = SS.runStateT (unMachineT m) initialState
+
+evalMachineT :: (FSM mach, Monad m) => MachineT mach m a -> m a
+evalMachineT = fmap fst . runMachineT
 
 instance (MonadError e m) => MonadError e (MachineT mach m) where
     throwError = lift . throwError
@@ -33,6 +40,30 @@ instance (MonadWriter w m) => MonadWriter w (MachineT mach m) where
 
 instance (MonadState s m) => MonadState s (MachineT mach m) where
     state f = MachineT $ lift (state f)
+
+instance (MonadIO m) => MonadIO (MachineT mach m) where
+    liftIO = lift . liftIO
+
+instance (MonadThrow m) => MonadThrow (MachineT mach m) where
+    throwM = lift . throwM
+
+instance (MonadCatch m) => MonadCatch (MachineT mach m) where
+    catch (MachineT m) f = MachineT $ catch m (unMachineT . f)
+
+instance (MonadMask m) => MonadMask (MachineT mach m) where
+  mask a = MachineT $ mask $ \u -> unMachineT (a $ q u)
+    where q :: (SS.StateT (StateType mach) m a -> SS.StateT (StateType mach) m a) -> MachineT mach m a -> MachineT mach m a
+          q u = MachineT . u . unMachineT
+  uninterruptibleMask a =
+    MachineT $ uninterruptibleMask $ \u -> unMachineT (a $ q u)
+    where q :: (SS.StateT (StateType mach) m a -> SS.StateT (StateType mach) m a) -> MachineT mach m a -> MachineT mach m a
+          q u = MachineT . u . unMachineT
+
+instance (MonadFSM mach m)           => MonadFSM mach (ExceptT   e m)
+instance (MonadFSM mach m)           => MonadFSM mach (ReaderT   r m)
+instance (MonadFSM mach m, Monoid w) => MonadFSM mach (WriterT   w m)
+instance (MonadFSM mach m)           => MonadFSM mach (SS.StateT s m)
+instance (MonadFSM mach m)           => MonadFSM mach (SL.StateT s m)
 
 type family EventIdKind event :: Type
 type family StateIdKind event :: Type
@@ -67,8 +98,8 @@ class (FSM mach, Monad m) => MonadFSM mach m | m -> mach where
     withMachineState :: (StateType mach -> m a) -> m a
     withMachineState = (getMachineState >>=)
 
-    doTransition :: (FSMValidTransition mach from via to) => (StateType' mach from -> EventType' mach via -> m (StateType' mach to)) -> StateType' mach from -> EventType' mach via -> m ()
-    doTransition action from via = putMachineState . wrapState =<< action from via
+    doTransition :: (FSMValidTransition mach from via to) => StateType' mach from -> EventType' mach via -> (StateType' mach from -> EventType' mach via -> m (StateType' mach to)) -> m ()
+    doTransition from via action = putMachineState . wrapState =<< action from via
 
 instance (FSM mach, Monad m) => MonadFSM mach (MachineT mach m) where
     getMachineState = MachineT get

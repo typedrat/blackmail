@@ -42,10 +42,11 @@ makeStateType (Machine name graph) = do
         stateToCon (FSMNode state attrs _) = GadtC [mkName $ state ++ "Data"] (attrToField <$> attrs) (AppT (ConT dataTyName) (PromotedT $ mkName state))
 
         dataTy = DataD [] dataTyName [KindedTV idName (ConT idTypeName)] Nothing (stateToCon <$> states) []
+        dataDeriving = StandaloneDerivD Nothing [] (AppT (ConT ''Show) (AppT (ConT dataTyName) (VarT idName)))
 
     -- Make the type that wraps the safe states
         stateConF name = NormalC (mkName $ nameBase name ++ "_") [(plainBang, AppT (ConT dataTyName) (PromotedT name))]
-        stateFamInst = DataInstD [] ''StateType [ConT (mkName $ name)] Nothing (stateConF <$> stateNames) []
+        stateFamInst = DataInstD [] ''StateType [ConT (mkName $ name)] Nothing (stateConF <$> stateNames) [DerivClause Nothing [ConT ''Show]]
 
     [stateType'] <- [d| type instance StateType' $(conT $ mkName name) = $(conT dataTyName) |]
     let initialState' = ValD (VarP 'initialState) (NormalB (AppE (ConE (mkName "Initial_")) (ConE (mkName "InitialData")))) []
@@ -55,7 +56,7 @@ makeStateType (Machine name graph) = do
             []
         wrapState' = FunD 'wrapState (wrapStateClauses <$> states)
 
-    return ([idTy, stateIdKindInst, dataTy], [stateType', stateFamInst, initialState', wrapState'])
+    return ([idTy, stateIdKindInst, dataTy, dataDeriving], [stateType', stateFamInst, initialState', wrapState'])
 
 makeEventType :: Machine -> Q ([Dec], [Dec])
 makeEventType (Machine name graph) = do
@@ -78,10 +79,11 @@ makeEventType (Machine name graph) = do
         eventToCon (FSMEvent event attrs) = GadtC [mkName $ event ++ "Data"] (attrToField <$> attrs) (AppT (ConT dataTyName) (PromotedT $ mkName event))
 
         dataTy = DataD [] dataTyName [KindedTV idName (ConT idTypeName)] Nothing (eventToCon <$> events) []
+        dataDeriving = StandaloneDerivD Nothing [] (AppT (ConT ''Show) (AppT (ConT dataTyName) (VarT idName)))
 
     -- Make the type that wraps the safe events
         eventConF name = NormalC (mkName $ nameBase name ++ "_") [(plainBang, AppT (ConT dataTyName) (PromotedT name))]
-        eventFamInst = DataInstD [] ''EventType [ConT (mkName $ name)] Nothing (eventConF <$> eventNames) []
+        eventFamInst = DataInstD [] ''EventType [ConT (mkName $ name)] Nothing (eventConF <$> eventNames) [DerivClause Nothing [ConT ''Show]]
 
     [eventType'] <- [d| type instance EventType' $(conT $ mkName name) = $(conT dataTyName) |]
 
@@ -91,7 +93,7 @@ makeEventType (Machine name graph) = do
             []
         wrapEvent' = FunD 'wrapEvent (wrapEventClauses <$> events)
 
-    return ([idTy, eventIdKindInst, dataTy], [eventType', eventFamInst, wrapEvent'])
+    return ([idTy, eventIdKindInst, dataTy, dataDeriving], [eventType', eventFamInst, wrapEvent'])
 
 makeOptics :: Machine -> Q [Dec]
 makeOptics (Machine name graph) = do
