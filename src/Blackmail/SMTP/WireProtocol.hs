@@ -50,8 +50,8 @@ msgP = heloP <|> ehloP <|> mailP <|> rcptP <|> dataP <|> rsetP <|> noopP <|> qui
         unknownP = Unknown_ . UnknownData <$> P.take 4 <* anyChar `manyTill` endOfLine
 
 
-dataBodyP :: Parser (SMTPEventData DATABody)
-dataBodyP = DATABodyData . BS.unlines <$> P.takeTill (\c -> c == '\r' || c == '\n') `manyTill` (endOfLine *> char '.' *> endOfLine)
+dataBodyP :: Parser (EventType SMTP)
+dataBodyP = DATABody_ . DATABodyData . BS.unlines <$> P.takeTill (\c -> c == '\r' || c == '\n') `manyTill` (endOfLine *> char '.' *> endOfLine)
 
 --
 
