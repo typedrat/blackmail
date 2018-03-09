@@ -1,20 +1,26 @@
-module Blackmail.SMTP.StateMachine.Types (SMTP(..), SMTPStateId(..), SMTPStateData(..), StateType(..), SMTPEventId(..), SMTPEventData(..), EventType(..), SMTPHasClientName(..), SMTPHasSender(..), SMTPHasRecipients(..), SMTPHasRecipient(..), SMTPHasBody(..)) where
+module Blackmail.SMTP.StateMachine.Types (SMTP(..), SMTPStateId(..), SMTPStateData(..), StateType(..), SMTPEventId(..), SMTPEventData(..), EventType(..), SMTPHasSockAddr(..), SMTPHasClientName(..), SMTPHasSender(..), SMTPHasRecipients(..), SMTPHasRecipient(..), SMTPHasBody(..)) where
 
 import Control.FSM.TH
 import Control.FSM.Monad
 import qualified Data.ByteString as BS
+import Pipes.Network.TCP.Safe (SockAddr)
 
 import Blackmail.SMTP.Address
 
 --
 
 makeFSMTypes "SMTP" $ do
+    let connectingA = attrib "sockAddr" [t| SockAddr |]
+    connect <- event "Connection" connectingA
+    connected <- state "Connected" connectingA
+    transition initial connect connected
+
     let greetingA = attrib "clientName" [t| BS.ByteString |]
     helo <- event "HELO" greetingA
     ehlo <- event "EHLO" greetingA
     greeted <- state "Greeted" greetingA
-    transition initial helo greeted
-    transition initial ehlo greeted
+    transition connected helo greeted
+    transition connected ehlo greeted
 
     let senderA = attrib "sender" [t| Maybe Address |]
     mail <- event "MAIL" senderA
@@ -40,16 +46,16 @@ makeFSMTypes "SMTP" $ do
 
     quit <- event "QUIT" (return ())
     final <- terminal "Disconnect" (return ())
-    mapM_ (\x -> transition x quit final) [initial, greeted, hasSender, hasRecipients]
+    mapM_ (\x -> transition x quit final) [connected, greeted, hasSender, hasRecipients]
 
     vrfy <- event "VRFY" (return ())
-    mapM_ (\x -> transition x vrfy x) [initial, greeted, hasSender, hasRecipients]
+    mapM_ (\x -> transition x vrfy x) [connected, greeted, hasSender, hasRecipients]
 
     noop <- event "NOOP" (return ())
-    mapM_ (\x -> transition x noop x) [initial, greeted, hasSender, hasRecipients]
+    mapM_ (\x -> transition x noop x) [connected, greeted, hasSender, hasRecipients]
 
     unknown <- event "Unknown" (attrib "unknownCmd" [t| BS.ByteString |])
-    mapM_ (\x -> transition x unknown x) [initial, greeted, hasSender, hasRecipients]
+    mapM_ (\x -> transition x unknown x) [connected, greeted, hasSender, hasRecipients]
 
     invalid <- event "Invalid" (return ())
-    mapM_ (\x -> transition x invalid x) [initial, greeted, hasSender, hasRecipients]
+    mapM_ (\x -> transition x invalid x) [connected, greeted, hasSender, hasRecipients]
