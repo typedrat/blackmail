@@ -1,4 +1,4 @@
-module Control.FSM.TH.Description (Machine(..), DefnM(), DefnA(), FSMEvent(..), FSMNode(..), FSMAttribute(..), initial, makeMachine, machineToDot, event, state, terminal, transition, attrib) where
+module Control.FSM.TH.Description (Machine(..), DefnM(), DefnA(), FSMEvent(..), FSMNode(..), FSMAttribute(..), initial, makeMachine, event, state, terminal, transition, attrib) where
 
 import Control.Monad.State hiding (state)
 import Control.Monad.Writer
@@ -6,9 +6,6 @@ import Data.Graph.Inductive.Graph
 import qualified Data.Graph.Inductive.NodeMap as NM
 import Data.Graph.Inductive.PatriciaTree
 import Data.Graph.Inductive.Query.DFS
-import Data.GraphViz
-import Data.GraphViz.Attributes
-import Data.GraphViz.Attributes.Complete (Attribute(Peripheries))
 import Language.Haskell.TH
 
 --
@@ -19,18 +16,6 @@ data Machine = Machine
              }
              deriving (Eq, Show)
 
-machineToDot :: Machine -> DotGraph Node
-machineToDot (Machine name gr) = graphToDot params gr
-    where
-        params :: GraphvizParams Node FSMNode FSMEvent () FSMNode
-        params = defaultParams { globalAttributes = attrs, fmtEdge = fmtEdge, fmtNode = fmtNode }
-        attrs = [GraphAttrs [toLabel ("FSM " ++ name)]]
-        fmtEdge (_, _, edge) = [toLabel edge]
-        fmtNode (_, node)
-            | node == initial = [rank SourceRank, toLabel node]
-            | _nTerminal node = [rank SinkRank, toLabel node, Peripheries 2]
-            | otherwise       = [toLabel node]
-
 initial :: FSMNode
 initial = FSMNode "Initial" [] False
 
@@ -40,9 +25,6 @@ data FSMEvent = FSMEvent
               }
               deriving (Eq, Ord, Show)
 
-instance Labellable FSMEvent where
-    toLabelValue (FSMEvent name _) = toLabelValue ("   " ++ name ++ "   ")
-
 data FSMNode = FSMNode
               { _nName :: String
               , _nAttribs :: [FSMAttribute]
@@ -50,9 +32,6 @@ data FSMNode = FSMNode
               }
               | FSMLoopbackNode
               deriving (Eq, Ord, Show)
-
-instance Labellable FSMNode where
-    toLabelValue (FSMNode name _ _) = toLabelValue ("   " ++ name ++ "   ")
 
 data FSMAttribute = FSMAttribute
             { _aName :: String

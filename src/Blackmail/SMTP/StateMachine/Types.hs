@@ -3,14 +3,14 @@ module Blackmail.SMTP.StateMachine.Types (SMTP(..), SMTPStateId(..), SMTPStateDa
 import Control.FSM.TH
 import Control.FSM.Monad
 import qualified Data.ByteString as BS
-import Pipes.Network.TCP.Safe (SockAddr)
+import Network.Socket (SockAddr)
 
 import Blackmail.SMTP.Address
 
 --
 
-makeFSMTypes "SMTP" $ do
-    let connectingA = attrib "sockAddr" [t| SockAddr |]
+makeIllustratedFSMTypes "SMTP" $ do
+    let connectingA = attrib "sockAddr" [t| String |]
     connect <- event "Connection" connectingA
     connected <- state "Connected" connectingA
     transition initial connect connected

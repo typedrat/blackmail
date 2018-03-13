@@ -1,4 +1,4 @@
-module Control.FSM.TH (DefnM(), DefnA(), FSMEvent(), FSMNode(), FSMAttribute(), initial, event, state, terminal, transition, attrib, makeFSMTypes, makeIllustratedFSMTypes) where
+module Control.FSM.TH (DefnM(), DefnA(), FSMEvent(), FSMNode(), FSMAttribute(), initial, event, state, terminal, transition, attrib, makeFSMTypes) where
 
 import Control.FSM.TH.Description
 import Control.FSM.Monad.Internal
@@ -8,7 +8,6 @@ import Control.Monad.Trans
 import Control.Monad.State.Class (get, put)
 import Data.Char (toUpper, toLower)
 import Data.Graph.Inductive.Graph hiding ((&))
-import Data.GraphViz.Commands
 import Data.Foldable (foldl')
 import Data.List (elemIndex, nub, nubBy)
 import Data.Proxy
@@ -208,16 +207,3 @@ makeRelativeToProject rel = do
                         else findProjectDir dir
 
         isCabalFile fp = takeExtension fp == ".cabal"
-
-
--- | Works in the same way as 'makeFSM', but also uses Graphviz to generate a PNG diagram of the FSM structure.
-makeIllustratedFSMTypes :: String -> DefnM a -> Q [Dec]
-makeIllustratedFSMTypes name defn = do
-    machine <- makeMachine name defn
-
-    runIO $ quitWithoutGraphviz "Graphviz must be installed and on your PATH in order to use the diagram generation functionality."
-    let dot = machineToDot machine
-    path <- makeRelativeToProject (name ++ ".png")
-    runIO $ runGraphviz dot Png path
-
-    reifyFSM machine

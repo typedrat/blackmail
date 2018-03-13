@@ -20,19 +20,20 @@ category:            Web
 description:         Please see the README on Github at <https://github.com/typedrat/blackmail#readme>
 
 dependencies:
-- base             >= 4.10 && < 5
+- base             >= 4.9  && < 5
 - bytestring       >= 0.10 && < 0.11
-- text
+- text             >= 1.2  && < 1.3
 - template-haskell >= 2.11 && < 2.13
 - attoparsec       >= 0.13 && < 0.14
 - monad-logger     >= 0.3  && < 0.4
-- lens             >= 4.15 && < 4.16
+- lens             >= 4.14 && < 4.17
 - network          >= 2.6  && < 2.7
+- conduit          >= 1.3  && < 1.4
+- conduit-extra    >= 1.3  && < 1.4
 
 # these are extra deps for the FSM thingy
 - mtl
 - fgl
-- graphviz
 - directory
 - filepath
 

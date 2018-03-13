@@ -1,7 +1,6 @@
 module Control.FSM.Monad.Internal (MachineT(..), runMachineT, evalMachineT, EventIdKind, StateIdKind, FSM(..), FSMValidTransition(..), MonadFSM(..)) where
 
 import Control.Applicative
-import Control.Monad.Catch
 import Control.Monad.Except
 import Control.Monad.IO.Class
 import Control.Monad.Reader
@@ -43,21 +42,6 @@ instance (MonadState s m) => MonadState s (MachineT mach m) where
 
 instance (MonadIO m) => MonadIO (MachineT mach m) where
     liftIO = lift . liftIO
-
-instance (MonadThrow m) => MonadThrow (MachineT mach m) where
-    throwM = lift . throwM
-
-instance (MonadCatch m) => MonadCatch (MachineT mach m) where
-    catch (MachineT m) f = MachineT $ catch m (unMachineT . f)
-
-instance (MonadMask m) => MonadMask (MachineT mach m) where
-  mask a = MachineT $ mask $ \u -> unMachineT (a $ q u)
-    where q :: (SS.StateT (StateType mach) m a -> SS.StateT (StateType mach) m a) -> MachineT mach m a -> MachineT mach m a
-          q u = MachineT . u . unMachineT
-  uninterruptibleMask a =
-    MachineT $ uninterruptibleMask $ \u -> unMachineT (a $ q u)
-    where q :: (SS.StateT (StateType mach) m a -> SS.StateT (StateType mach) m a) -> MachineT mach m a -> MachineT mach m a
-          q u = MachineT . u . unMachineT
 
 instance (MonadFSM mach m)           => MonadFSM mach (ExceptT   e m)
 instance (MonadFSM mach m)           => MonadFSM mach (ReaderT   r m)
