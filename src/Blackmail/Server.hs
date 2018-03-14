@@ -1,6 +1,7 @@
 module Blackmail.Server (runServer, module Blackmail.SMTP.Config) where
 
 import Control.Lens.Operators
+import Control.Monad
 import Control.Monad.Logger
 import Conduit
 import Data.Conduit.Network
@@ -15,7 +16,12 @@ import Blackmail.SMTP.Protocol
 runServer :: (MonadUnliftIO m) => Settings m -> m ()
 runServer settings = withRunInIO $ \run -> do
     let settings' = rebaseHandlers run settings
-        serverSet = serverSettings (settings' ^. port) (settings' ^. host)
+        serverSets = (\port -> serverSettings port (settings' ^. host)) <$> (settings' ^. ports)
         filter _ lvl = lvl /= LevelDebug || settings' ^. showDebuggingLogs
         runFilteredLogger = runStderrLoggingT . filterLogger filter
-    runTCPServer serverSet (runFilteredLogger . evalMachineT . runConduit . runReaderC settings' . smtpConduit)
+    ids <- forM serverSets $ \set -> do
+        liftIO $ putStrLn ("Listening on port " ++ show (getPort set))
+        async $ runTCPServer set (runFilteredLogger . evalMachineT . runConduit . runReaderC settings' . smtpConduit)
+
+    mapM wait ids
+    return ()

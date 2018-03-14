@@ -9,11 +9,11 @@ import Blackmail.SMTP.Address
 
 data NetworkSettings = NetworkSettings
                      { _host :: HostPreference
-                     , _port :: Int
+                     , _ports :: [Int]
                      , _visibleHost :: Maybe (BS.ByteString)
                      }
 
-defaultNetworkSettings = NetworkSettings "*6" 8025 Nothing
+defaultNetworkSettings = NetworkSettings "*6" [8025] Nothing
 
 data Handlers m = Handlers
               { _allowSender :: Maybe (Address) -> m Bool
