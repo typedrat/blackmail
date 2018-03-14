@@ -70,7 +70,6 @@ smtpProtocol = do
             yield $ MailActionCompleted (host <> " - Nice to meet you. I like romantic dinners and long Brownian walks on the beach.")
             yield $ MailActionCompleted "PIPELINING"
             yield $ MailActionCompleted "8BITMIME"
-            yield $ MailActionCompleted "SMTPUTF8"
             logFn LevelInfo addr ("greeted with EHLO as " <> T.decodeUtf8 client)
 
             doTransition from via $ GreetedData addr client
