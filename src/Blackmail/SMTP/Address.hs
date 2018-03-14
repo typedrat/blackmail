@@ -10,7 +10,10 @@ import qualified Data.ByteString.Char8 as BS
 -- "Here's a nickle, kid, get yourself a better mail client."
 
 data Address = Address { _mailbox :: BS.ByteString, _domain :: BS.ByteString }
-             deriving (Show, Eq)
+             deriving (Eq)
+
+instance Show Address where
+    show (Address mb d) = (BS.unpack mb) ++ '@' : (BS.unpack d)
 
 addressP :: Parser Address
 addressP = char '<' *> skipRoute *> ((\m _ d -> Address m d) <$> mailbox <*> char '@' <*> domain) <* char '>'

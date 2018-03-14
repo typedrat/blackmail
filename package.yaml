@@ -26,8 +26,13 @@ dependencies:
 - template-haskell >= 2.11 && < 2.13
 - attoparsec       >= 0.13 && < 0.14
 - monad-logger     >= 0.3  && < 0.4
+- time             >= 1.4  && < 2.0
 - lens             >= 4.14 && < 4.17
+- exceptions       >= 0.8  && < 0.9
+- unliftio         >= 0.2  && < 0.3
 - network          >= 2.6  && < 2.7
+- byteorder        >= 1.0  && < 1.1
+- hostname         >= 1.0  && < 1.1
 - conduit          >= 1.3  && < 1.4
 - conduit-extra    >= 1.3  && < 1.4
 
@@ -63,12 +68,12 @@ default-extensions:
 library:
   other-modules:
   - Control.FSM.TH.Description
-  - Blackmail.SMTP.StateMachine.Types
+  - Network.Socket.SockAddr
   source-dirs:
   - src
 
 executables:
-  blackmail-exe:
+  blackmail:
     main:                Main.hs
     source-dirs:
     - app
@@ -78,6 +83,7 @@ executables:
     - -with-rtsopts=-N
     dependencies:
     - blackmail
+    - unix
 
 tests:
   blackmail-test:

@@ -1,6 +1,7 @@
-module Control.FSM.Monad.Internal (MachineT(..), runMachineT, evalMachineT, EventIdKind, StateIdKind, FSM(..), FSMValidTransition(..), MonadFSM(..)) where
+module Control.FSM.Monad.Internal (MachineT(..), runMachineT, evalMachineT, EventIdKind, StateIdKind, FSM(..), FSMValidTransition(..), FSMTransitionable(..), MonadFSM(..)) where
 
 import Control.Applicative
+import Control.Lens.Setter
 import Control.Monad.Except
 import Control.Monad.IO.Class
 import Control.Monad.Reader
@@ -70,6 +71,10 @@ class FSM mach where
 
 class FSMValidTransition mach (from :: state) (via :: event) (to :: state)
 
+class FSMTransitionable from to where
+    type FSMTransitionDifference from to
+    _transition :: Setter from to (FSMTransitionDifference from to) (FSMTransitionDifference from to)
+
 class (FSM mach, Monad m) => MonadFSM mach m | m -> mach where
     getMachineState :: m (StateType mach)
     default getMachineState :: (MonadFSM mach n, MonadTrans t, m ~ t n) => m (StateType mach)
@@ -82,8 +87,8 @@ class (FSM mach, Monad m) => MonadFSM mach m | m -> mach where
     withMachineState :: (StateType mach -> m a) -> m a
     withMachineState = (getMachineState >>=)
 
-    doTransition :: (FSMValidTransition mach from via to) => StateType' mach from -> EventType' mach via -> (StateType' mach from -> EventType' mach via -> m (StateType' mach to)) -> m ()
-    doTransition from via action = putMachineState . wrapState =<< action from via
+    doTransition :: (FSMValidTransition mach from via to) => StateType' mach from -> EventType' mach via -> StateType' mach to -> m ()
+    doTransition _ _ action = putMachineState (wrapState action)
 
 instance (FSM mach, Monad m) => MonadFSM mach (MachineT mach m) where
     getMachineState = MachineT get
