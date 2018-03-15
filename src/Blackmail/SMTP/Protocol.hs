@@ -46,8 +46,9 @@ smtpProtocol = do
     awaitForever $ \event -> withMachineState $ \state -> case (state, event) of
         (Initial_ from, Connection_ via) -> do
             let addr = via ^. _sockAddr
+            host <- hostname
 
-            yield $ ServiceReady "ESMTP - blackmail, n. extortion or coercion by threats, especially of public exposure or criminal prosecution."
+            yield $ ServiceReady (host <> " ESMTP - blackmail, n. extortion or coercion by threats, especially of public exposure or criminal prosecution.")
             logFn LevelInfo addr "connected"
 
             doTransition from via $ ConnectedData addr
