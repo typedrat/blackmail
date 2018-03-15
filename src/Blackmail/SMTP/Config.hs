@@ -1,9 +1,12 @@
-module Blackmail.SMTP.Config (NetworkSettings(), Handlers(), rebaseHandlers, Settings(), Mail(..), HasNetworkSettings(..), HasHandlers(..), HasSettings(..), defaultNetworkSettings, defaultHandlers, defaultSettings) where
+module Blackmail.SMTP.Config (NetworkSettings(), Handlers(), rebaseHandlers, Settings(), Mail(..), HasNetworkSettings(..), HasHandlers(..), HasSettings(..), defaultHandlers, defaultSettings) where
 
-import Control.Lens
+import Control.Lens hiding ((.=))
+import Data.Conduit.Network
 import Control.Monad.IO.Class
 import qualified Data.ByteString.Char8 as BS
-import Data.Conduit.Network
+import Data.String
+import qualified Data.Text.Encoding as T
+import Data.Yaml
 
 import Blackmail.SMTP.Address
 
@@ -11,9 +14,19 @@ data NetworkSettings = NetworkSettings
                      { _host :: HostPreference
                      , _ports :: [Int]
                      , _visibleHost :: Maybe (BS.ByteString)
+                     , _tlsCert :: Maybe FilePath
+                     , _tlsKey :: Maybe FilePath
                      }
 
-defaultNetworkSettings = NetworkSettings "*6" [8025] Nothing
+instance FromJSON NetworkSettings where
+    parseJSON = withObject "network setttings" $ \o -> do
+        _host <- fromString <$> (o .:? "host" .!= "*6")
+        _ports <- o .:? "ports" .!= [8025]
+        _visibleHost <- fmap T.encodeUtf8 <$> o .:? "visible-host"
+        _tlsCert <- o .:? "tls-cert-path"
+        _tlsKey <- o .:? "tls-key-path"
+        return NetworkSettings{..}
+
 
 data Handlers m = Handlers
               { _allowSender :: Maybe (Address) -> m Bool
@@ -34,8 +47,15 @@ data Settings m = Settings
               , _sShowDebuggingLogs :: Bool
               }
 
-defaultSettings :: (MonadIO m) => Settings m
-defaultSettings = Settings defaultNetworkSettings defaultHandlers True
+instance (MonadIO m) => FromJSON (Settings m) where
+    parseJSON = withObject "settings" $ \o -> do
+        _sNetworkSettings <- o .: "network"
+        _sHandlers <- pure defaultHandlers
+        _sShowDebuggingLogs <- o .:? "show-debug-logs" .!= True
+        return Settings{..}
+
+defaultSettings :: [Value]
+defaultSettings = [object ["network" .= object []]]
 
 data Mail = Mail
           { from :: Maybe Address
@@ -48,9 +68,11 @@ instance Show Mail where
     show (Mail from to body) = unlines $ ["From: <" ++ from' ++ ">"] ++ fmap (\t -> "To: <" ++ show t ++ ">") to ++ [BS.unpack body]
         where from' = maybe "" show from
 
+
 makeLensesWith classyRules ''NetworkSettings
 makeLensesWith classyRules ''Handlers
 makeLenses ''Settings
+
 
 class (HasHandlers c m, HasNetworkSettings c) => HasSettings c m where
     settings :: Lens' c (Settings m)
