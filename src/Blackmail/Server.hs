@@ -45,20 +45,22 @@ runServer settings = withRunInIO $ \run -> do
 
         settings' = rebaseHandlers run settings & enableTls .~ hasTls
 
+        runTCPServer' :: Int -> IO ()
         runTCPServer' port
             | hasTls = do
                 let Just cert' = cert
                     Just key' = key
                     config = tlsConfig host' port cert' key'
-                runTCPServerStartTLS config (\(ad, st) -> mkServer (smtpConduit $ Just st) ad)
+                    f st = st (mkServer $ smtpConduit Nothing)
+                runTCPServerStartTLS config (\(ad, st) -> mkServer (smtpConduit $ Just (f st)) ad)
             | otherwise = runTCPServer (serverSettings port host') $ mkServer (smtpConduit Nothing)
 
         mkServer app ad = runFilteredLogger . runResourceT . evalMachineT . runConduit . runReaderC settings' $ do
             logFn <- mkLogFn
             bracketP (return ad) (\ad -> logFn LevelInfo (appSockAddr ad) "disconnected") app
 
-    ids <- forM (settings ^. ports) $ \port -> do
-        liftIO $ putStrLn ("Listening on port " ++ show port)
+    ids <- liftIO . forM (settings ^. ports) $ \port -> do
+        putStrLn ("Listening on port " ++ show port)
         async $ runTCPServer' port
 
     mapM wait ids

@@ -42,7 +42,7 @@ logFn lvl addr msg = do
         msg' = "[" <> timestamp <> ", " <> addrT <> "] " <> msg
     logWithoutLoc "" lvl msg'
 
-smtpProtocol :: (MonadFSM SMTP m, MonadLogger m, MonadIO m, MonadReader r m, MonadThrow m, HasSettings r IO) => Maybe ((AppData -> ConduitT (EventType SMTP) SMTPResponse m ()) -> ConduitT (EventType SMTP) SMTPResponse m ()) -> ConduitT (EventType SMTP) SMTPResponse m ()
+smtpProtocol :: (MonadFSM SMTP m, MonadLogger m, MonadIO m, MonadReader r m, MonadThrow m, HasSettings r IO) => Maybe (IO ()) -> ConduitT (EventType SMTP) SMTPResponse m ()
 smtpProtocol st = do
     awaitForever $ \event -> withMachineState $ \state -> case (state, event) of
         (Initial_ from, Connection_ via) -> do
@@ -183,8 +183,8 @@ smtpProtocol st = do
         (Greeted_ from, STARTTLS_ via) | isJust st -> do
             let addr = from ^. _sockAddr
                 Just start = st
-
-            start (smtpConduit Nothing)
+            yield $ ServiceReady "do it ya nerd"
+            liftIO start
 
     -- Trivial handlers:
         (_, VRFY_ via) ->
@@ -251,5 +251,5 @@ smtpEncoder = mapC responseToBS
 smtpSink :: (MonadIO m) => AppData -> ConduitT SMTPResponse o m ()
 smtpSink ad = smtpEncoder .| appSink ad
 
-smtpConduit :: (MonadFSM SMTP m, MonadIO m, MonadLogger m, MonadThrow m, HasSettings r IO, MonadReader r m) => Maybe ((AppData -> ConduitT (EventType SMTP) SMTPResponse m ()) -> ConduitT (EventType SMTP) SMTPResponse m ()) -> AppData -> ConduitT i o m ()
+smtpConduit :: (MonadFSM SMTP m, MonadIO m, MonadLogger m, MonadThrow m, HasSettings r IO, MonadReader r m) => Maybe (IO ()) -> AppData -> ConduitT i o m ()
 smtpConduit st ad = smtpSource ad .| smtpProtocol st .| smtpSink ad
