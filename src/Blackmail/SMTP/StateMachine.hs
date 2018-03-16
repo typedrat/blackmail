@@ -47,6 +47,9 @@ makeFSMTypes "SMTP" $ do
     dataEnd <- event "DATAEnd" (return ())
     transition waitingForBody dataEnd received
 
+    startTls <- event "STARTTLS" (return ())
+    transition greeted startTls connected
+
     rset <- event "RSET" (return ())
     mapM_ (\x -> transition x rset greeted) [greeted, hasSender, hasRecipients, received]
 

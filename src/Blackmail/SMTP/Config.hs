@@ -16,6 +16,7 @@ data NetworkSettings = NetworkSettings
                      , _visibleHost :: Maybe (BS.ByteString)
                      , _tlsCert :: Maybe FilePath
                      , _tlsKey :: Maybe FilePath
+                     , _enableTls :: Bool
                      }
 
 instance FromJSON NetworkSettings where
@@ -25,6 +26,7 @@ instance FromJSON NetworkSettings where
         _visibleHost <- fmap T.encodeUtf8 <$> o .:? "visible-host"
         _tlsCert <- o .:? "tls-cert-path"
         _tlsKey <- o .:? "tls-key-path"
+        _enableTls <- o .:? "enable-tls" .!= True
         return NetworkSettings{..}
 
 

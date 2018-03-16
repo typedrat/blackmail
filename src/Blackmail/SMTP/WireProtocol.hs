@@ -14,7 +14,7 @@ import Blackmail.SMTP.StateMachine
 --
 
 msgP :: Parser (EventType SMTP)
-msgP = heloP <|> ehloP <|> mailP <|> rcptP <|> dataP <|> rsetP <|> noopP <|> quitP <|> vrfyP <|> dataEndP <|> dataLineP
+msgP = heloP <|> ehloP <|> mailP <|> rcptP <|> dataP <|> rsetP <|> noopP <|> quitP <|> vrfyP <|> startTlsP <|> dataEndP <|> dataLineP
     where
         cmdP :: BS.ByteString -> Parser (EventType SMTP) -> Parser (EventType SMTP)
         cmdP cmd p = skipSpace *> stringCI cmd *> ((p <* space `manyTill` endOfLine) <|> (Invalid_ InvalidData <$ anyChar `manyTill` endOfLine))
@@ -48,6 +48,8 @@ msgP = heloP <|> ehloP <|> mailP <|> rcptP <|> dataP <|> rsetP <|> noopP <|> qui
         --
         -- VRFY is so dumb that it's worth ensuring it can't be implemented by mistake.
         vrfyP = cmdP "VRFY" $ VRFY_ VRFYData <$ arg clientName
+
+        startTlsP = cmdP "STARTTLS" $ pure (STARTTLS_ STARTTLSData)
 
         dataEndP = ("\n.\n" <|> "\r\n.\r\n") $> DATAEnd_ DATAEndData
 

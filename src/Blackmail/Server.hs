@@ -1,10 +1,12 @@
 module Blackmail.Server (runServer, module Blackmail.SMTP.Config) where
 
-import Control.Lens.Operators
+import Control.Lens
 import Control.Monad
 import Control.Monad.Logger
 import Conduit
 import Data.Conduit.Network
+import Data.Conduit.Network.TLS
+import Data.Maybe
 import Data.Semigroup
 import qualified Data.Text as T
 import Data.Time.Clock
@@ -33,16 +35,31 @@ mkLogFn = do
 
 runServer :: (MonadUnliftIO m) => Settings m -> m ()
 runServer settings = withRunInIO $ \run -> do
-    let settings' = rebaseHandlers run settings
-        serverSets = (\port -> serverSettings port (settings' ^. host)) <$> (settings' ^. ports)
-        filter _ lvl = lvl /= LevelDebug || settings' ^. showDebuggingLogs
+    let host' = settings ^. host
+        filter _ lvl = lvl /= LevelDebug || settings ^. showDebuggingLogs
         runFilteredLogger = runStderrLoggingT . filterLogger filter
-    ids <- forM serverSets $ \set -> do
-        liftIO $ putStrLn ("Listening on port " ++ show (getPort set))
-        async $ runTCPServer set (runFilteredLogger . runResourceT . evalMachineT . runConduit . runReaderC settings' . (\ad -> do
-                logFn <- mkLogFn
-                bracketP (pure ad) (\ad -> logFn LevelInfo (appSockAddr ad) "disconnected") smtpConduit
-            ))
+
+    let cert = settings ^. tlsCert
+        key  = settings ^. tlsKey
+        hasTls = isJust cert && isJust key && (settings ^. enableTls)
+
+        settings' = rebaseHandlers run settings & enableTls .~ hasTls
+
+        runTCPServer' port
+            | hasTls = do
+                let Just cert' = cert
+                    Just key' = key
+                    config = tlsConfig host' port cert' key'
+                runTCPServerStartTLS config (\(ad, st) -> mkServer (smtpConduit $ Just st) ad)
+            | otherwise = runTCPServer (serverSettings port host') $ mkServer (smtpConduit Nothing)
+
+        mkServer app ad = runFilteredLogger . runResourceT . evalMachineT . runConduit . runReaderC settings' $ do
+            logFn <- mkLogFn
+            bracketP (return ad) (\ad -> logFn LevelInfo (appSockAddr ad) "disconnected") app
+
+    ids <- forM (settings ^. ports) $ \port -> do
+        liftIO $ putStrLn ("Listening on port " ++ show port)
+        async $ runTCPServer' port
 
     mapM wait ids
     return ()

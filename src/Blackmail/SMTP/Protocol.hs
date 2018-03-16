@@ -11,6 +11,7 @@ import qualified Data.ByteString.Char8 as BS
 import {- Data. -} Conduit
 import Data.Conduit.Attoparsec
 import Data.Conduit.Network
+import Data.Maybe
 import Data.Semigroup
 import Data.Time.Clock
 import Data.Time.Format
@@ -41,8 +42,8 @@ logFn lvl addr msg = do
         msg' = "[" <> timestamp <> ", " <> addrT <> "] " <> msg
     logWithoutLoc "" lvl msg'
 
-smtpProtocol :: (MonadFSM SMTP m, MonadLogger m, MonadIO m, MonadReader r m, HasSettings r IO) => ConduitT (EventType SMTP) SMTPResponse m ()
-smtpProtocol = do
+smtpProtocol :: (MonadFSM SMTP m, MonadLogger m, MonadIO m, MonadReader r m, MonadThrow m, HasSettings r IO) => Maybe ((AppData -> ConduitT (EventType SMTP) SMTPResponse m ()) -> ConduitT (EventType SMTP) SMTPResponse m ()) -> ConduitT (EventType SMTP) SMTPResponse m ()
+smtpProtocol st = do
     awaitForever $ \event -> withMachineState $ \state -> case (state, event) of
         (Initial_ from, Connection_ via) -> do
             let addr = via ^. _sockAddr
@@ -66,11 +67,13 @@ smtpProtocol = do
         (Connected_ from, EHLO_ via) -> do
             let addr = from ^. _sockAddr
                 client = via ^. _clientName
+                canStartTls = isJust st
 
             host <- hostname
             yield $ MailActionCompleted (host <> " - Nice to meet you. I like romantic dinners and long Brownian walks on the beach.")
             yield $ MailActionCompleted "PIPELINING"
             yield $ MailActionCompleted "8BITMIME"
+            when canStartTls (yield $ MailActionCompleted "STARTTLS")
             logFn LevelInfo addr ("greeted with EHLO as " <> T.decodeUtf8 client)
 
             doTransition from via $ GreetedData addr client
@@ -177,6 +180,12 @@ smtpProtocol = do
 
             doTransition from via $ MailReceivedData addr client
 
+        (Greeted_ from, STARTTLS_ via) | isJust st -> do
+            let addr = from ^. _sockAddr
+                Just start = st
+
+            start (smtpConduit Nothing)
+
     -- Trivial handlers:
         (_, VRFY_ via) ->
             yield $ CannotVRFY "Do or do not, there is no VRFY."
@@ -242,5 +251,5 @@ smtpEncoder = mapC responseToBS
 smtpSink :: (MonadIO m) => AppData -> ConduitT SMTPResponse o m ()
 smtpSink ad = smtpEncoder .| appSink ad
 
-smtpConduit :: (MonadFSM SMTP m, MonadIO m, MonadLogger m, MonadThrow m, HasSettings r IO, MonadReader r m) => AppData -> ConduitT i o m ()
-smtpConduit ad = smtpSource ad .| smtpProtocol .| smtpSink ad
+smtpConduit :: (MonadFSM SMTP m, MonadIO m, MonadLogger m, MonadThrow m, HasSettings r IO, MonadReader r m) => Maybe ((AppData -> ConduitT (EventType SMTP) SMTPResponse m ()) -> ConduitT (EventType SMTP) SMTPResponse m ()) -> AppData -> ConduitT i o m ()
+smtpConduit st ad = smtpSource ad .| smtpProtocol st .| smtpSink ad
