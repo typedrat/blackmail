@@ -37,7 +37,7 @@ msgP = heloP <|> ehloP <|> mailP <|> rcptP <|> dataP <|> rsetP <|> noopP <|> qui
         mailP = cmdP "MAIL" $ argL "FROM:"
                            *> arg (fmap (MAIL_ . MAILData . Just) addressP <|> MAIL_ (MAILData Nothing) <$ string "<>")
                            -- I'm not going to do Q-P conversion, but I have to pretend I care
-                           <* optional (stringCI "BODY=7BIT" <|> stringCI "BODY=8BITMIME")
+                           <* optional (stringCI "BODY=7BIT" <|> stringCI "BODY=8BITMIME" <|> stringCI "SMTPUTF8")
         rcptP = cmdP "RCPT" $ argL "TO:"
                            *> arg (RCPT_ . RCPTData <$> addressP)
         dataP = cmdP "DATA" $ pure (DATA_ DATAData)
@@ -47,7 +47,7 @@ msgP = heloP <|> ehloP <|> mailP <|> rcptP <|> dataP <|> rsetP <|> noopP <|> qui
         -- Why are we parsing an argument and discarding it?
         --
         -- VRFY is so dumb that it's worth ensuring it can't be implemented by mistake.
-        vrfyP = cmdP "VRFY" $ VRFY_ VRFYData <$ arg clientName
+        vrfyP = cmdP "VRFY" $ VRFY_ VRFYData <$ (arg clientName *> optional (stringCI "SMTPUTF8"))
 
         startTlsP = cmdP "STARTTLS" $ pure (STARTTLS_ STARTTLSData)
 

@@ -72,7 +72,7 @@ smtpProtocol st = do
             host <- hostname
             -- This is a hideous way to do this, but the multi-line response has to be one single packet
             let banner = host <> " - Nice to meet you. I like romantic dinners and long Brownian walks on the beach."
-                exts = [banner, "250-PIPELINING", "250-8BITMIME"]
+                exts = [banner, "250-PIPELINING", "250-8BITMIME", "250-SMTPUTF8", "250-SIZE 31457280"]
                 msg = MailActionCompleted . BS.intercalate "\r\n" $ if canStartTls then exts ++ ["250-STARTTLS"] else exts
 
             yield msg
