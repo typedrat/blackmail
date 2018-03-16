@@ -70,10 +70,12 @@ smtpProtocol st = do
                 canStartTls = isJust st
 
             host <- hostname
-            yield $ MailActionCompleted (host <> " - Nice to meet you. I like romantic dinners and long Brownian walks on the beach.")
-            yield $ MailActionCompleted "PIPELINING"
-            yield $ MailActionCompleted "8BITMIME"
-            when canStartTls (yield $ MailActionCompleted "STARTTLS")
+            -- This is a hideous way to do this, but the multi-line response has to be one single packet
+            let banner = host <> " - Nice to meet you. I like romantic dinners and long Brownian walks on the beach."
+                exts = [banner, "250-PIPELINING", "250-8BITMIME"]
+                msg = MailActionCompleted . BS.intercalate "\r\n" $ if canStartTls then exts ++ ["250-STARTTLS"] else exts
+
+            yield msg
             logFn LevelInfo addr ("greeted with EHLO as " <> T.decodeUtf8 client)
 
             doTransition from via $ GreetedData addr client
