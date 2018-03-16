@@ -37,7 +37,9 @@ msgP = heloP <|> ehloP <|> mailP <|> rcptP <|> dataP <|> rsetP <|> noopP <|> qui
         mailP = cmdP "MAIL" $ argL "FROM:"
                            *> arg (fmap (MAIL_ . MAILData . Just) addressP <|> MAIL_ (MAILData Nothing) <$ string "<>")
                            -- I'm not going to do Q-P conversion, but I have to pretend I care
-                           <* optional (stringCI "BODY=7BIT" <|> stringCI "BODY=8BITMIME" <|> stringCI "SMTPUTF8")
+                           <* optional (stringCI "BODY=7BIT" <|> stringCI "BODY=8BITMIME")
+                           <* optional (stringCI "SMTPUTF8")
+                           <* optional (stringCI "SIZE=" *> decimal)
         rcptP = cmdP "RCPT" $ argL "TO:"
                            *> arg (RCPT_ . RCPTData <$> addressP)
         dataP = cmdP "DATA" $ pure (DATA_ DATAData)
