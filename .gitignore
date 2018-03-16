@@ -5,3 +5,4 @@ blackmail.cabal
 *~
 SMTP\.png
 blackmail.yaml
+*.pem
