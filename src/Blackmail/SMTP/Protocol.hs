@@ -49,7 +49,7 @@ smtpProtocol st = do
             let addr = via ^. _sockAddr
             host <- hostname
 
-            yield $ ServiceReady (host <> " ESMTP - blackmail, n. extortion or coercion by threats, especially of public exposure or criminal prosecution.")
+            yield $ ServiceReady [host <> " ESMTP - blackmail, n. extortion or coercion by threats, especially of public exposure or criminal prosecution."]
             logFn LevelInfo addr "connected"
 
             doTransition from via $ ConnectedData addr
@@ -59,7 +59,7 @@ smtpProtocol st = do
                 client = via ^. _clientName
 
             host <- hostname
-            yield $ MailActionCompleted (host <> " - Nice to meet you. I like romantic dinners and long Brownian walks on the beach.")
+            yield $ MailActionCompleted [host <> " - Nice to meet you. I like romantic dinners and long Brownian walks on the beach."]
             logFn LevelInfo addr ("greeted with HELO as " <> T.decodeUtf8 client)
 
             doTransition from via $ GreetedData addr client
@@ -72,8 +72,8 @@ smtpProtocol st = do
             host <- hostname
             -- This is a hideous way to do this, but the multi-line response has to be one single packet
             let banner = host <> " - Nice to meet you. I like romantic dinners and long Brownian walks on the beach."
-                exts = [banner, "250-PIPELINING", "250-8BITMIME", "250-SMTPUTF8", "250-SIZE 31457280"]
-                msg = MailActionCompleted . BS.intercalate "\r\n" $ if canStartTls then exts ++ ["250-STARTTLS"] else exts
+                exts = [banner, "PIPELINING", "8BITMIME", "SMTPUTF8", "SIZE 31457280"]
+                msg = MailActionCompleted $ if canStartTls then exts ++ ["250-STARTTLS"] else exts
 
             yield msg
             logFn LevelInfo addr ("greeted with EHLO as " <> T.decodeUtf8 client)
@@ -89,14 +89,14 @@ smtpProtocol st = do
 
             if isAllowed
                 then do
-                    yield $ MailActionCompleted "ok!"
+                    yield $ MailActionCompleted ["ok!"]
                     case sender of
                         Just sender -> logFn LevelDebug addr ("added sender <" <> T.pack (show sender) <> ">")
                         Nothing     -> logFn LevelDebug addr "added null sender <>"
 
                     doTransition from via $ HasSenderData addr client sender
                 else do
-                    yield $ ServiceNotAvailable "tough luck, kid"
+                    yield $ ServiceNotAvailable ["tough luck, kid"]
                     case sender of
                         Just sender -> logFn LevelDebug addr ("denied sender <" <> T.pack (show sender) <> ">")
                         Nothing     -> logFn LevelDebug addr "denied null sender <>"
@@ -113,12 +113,12 @@ smtpProtocol st = do
 
             if isAllowed
                 then do
-                    yield $ MailActionCompleted "ok!"
+                    yield $ MailActionCompleted ["ok!"]
                     logFn LevelDebug addr ("added recipient <" <> T.pack (show recipient) <> ">")
 
                     doTransition from via $ HasRecipientsData addr client sender [recipient]
                 else do
-                    yield $ MailboxPermUnavailable "tough luck, kid"
+                    yield $ MailboxPermUnavailable ["tough luck, kid"]
                     logFn LevelDebug addr ("denied recipient <" <> T.pack (show recipient) <> ">")
 
                     doTransition from via $ HasSenderData addr client sender
@@ -134,12 +134,12 @@ smtpProtocol st = do
 
             if isAllowed
                 then do
-                    yield $ MailActionCompleted "ok!"
+                    yield $ MailActionCompleted ["ok!"]
                     logFn LevelDebug addr ("added recipient <" <> T.pack (show recipient) <> ">")
 
                     doTransition from via $ HasRecipientsData addr client sender (recipient:recipients)
                 else do
-                    yield $ MailboxPermUnavailable "tough luck, kid"
+                    yield $ MailboxPermUnavailable ["tough luck, kid"]
                     logFn LevelDebug addr ("denied recipient <" <> T.pack (show recipient) <> ">")
 
                     doTransition from via $ HasRecipientsData addr client sender recipients
@@ -150,7 +150,7 @@ smtpProtocol st = do
                 sender = from ^. _sender
                 recipients = from ^. _recipients
 
-            yield $ StartMailInput "Hit me with your best shot, fiiiiire away"
+            yield $ StartMailInput ["Hit me with your best shot, fiiiiire away"]
             logFn LevelDebug addr "got data command, waiting for body"
 
             doTransition from via $ WaitingForBodyData addr client sender recipients BS.empty
@@ -174,7 +174,7 @@ smtpProtocol st = do
                 recipients = from ^. _recipients
                 body = from ^. _body
 
-            yield $ MailActionCompleted "everything's ready to go!"
+            yield $ MailActionCompleted ["everything's ready to go!"]
             logFn LevelInfo addr "finished receiving message"
 
             send <- view sendMail
@@ -185,15 +185,16 @@ smtpProtocol st = do
         (Greeted_ from, STARTTLS_ via) | isJust st -> do
             let addr = from ^. _sockAddr
                 Just start = st
-            yield $ ServiceReady "do it ya nerd"
+            logFn LevelInfo addr "switched to using TLS"
+            yield $ ServiceReady ["do it ya nerd"]
             liftIO start
 
     -- Trivial handlers:
         (_, VRFY_ via) ->
-            yield $ CannotVRFY "Do or do not, there is no VRFY."
+            yield $ CannotVRFY ["Do or do not, there is no VRFY."]
 
         (_, NOOP_ via) ->
-            yield $ MailActionCompleted "Successfully did nothing."
+            yield $ MailActionCompleted ["Successfully did nothing."]
 
         (Greeted_ from, RSET_ via) -> handleRSET from via
         (HasSender_ from, RSET_ via) -> handleRSET from via
@@ -207,11 +208,11 @@ smtpProtocol st = do
         (MailReceived_ from, QUIT_ via) -> handleQUIT from via
 
         (_, Unknown_ _) ->
-            yield $ UnknownCommand "What does that mean?"
+            yield $ UnknownCommand ["What does that mean?"]
         (_, Invalid_ _) ->
-            yield $ UnacceptableParams "What does that mean?"
+            yield $ UnacceptableParams ["What does that mean?"]
         (_, _) ->
-            yield $ BadCommandSequence "I don't understand what you're trying to do."
+            yield $ BadCommandSequence ["I don't understand what you're trying to do."]
 
 
 handleRSET :: (MonadFSM SMTP m, MonadLogger m, MonadIO m, SMTPHasSockAddr (StateType' SMTP from) SockAddr, SMTPHasClientName (StateType' SMTP from) BS.ByteString, FSMValidTransition SMTP from RSET Greeted)
@@ -221,7 +222,7 @@ handleRSET from via = do
         client = from ^. _clientName
 
     logFn LevelDebug addr "reset envelope"
-    yield $ MailActionCompleted "The envelope will be lost in time, like tears in rain."
+    yield $ MailActionCompleted ["The envelope will be lost in time, like tears in rain."]
 
     doTransition from via $ GreetedData addr client
 
@@ -231,7 +232,7 @@ handleQUIT from via = do
     let addr = from ^. _sockAddr
 
     logFn LevelDebug addr "requested I close the socket"
-    yield $ ServiceClosingChannel "Catch you on the flipside, dudemeister..."
+    yield $ ServiceClosingChannel ["Catch you on the flipside, dudemeister..."]
 
     liftIO $ killThread =<< myThreadId
 
