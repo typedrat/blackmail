@@ -73,7 +73,7 @@ class FSMValidTransition mach (from :: state) (via :: event) (to :: state)
 
 class FSMTransitionable from to where
     type FSMTransitionDifference from to
-    _transition :: Setter from to (FSMTransitionDifference from to) (FSMTransitionDifference from to)
+    _transition :: Setter from to () (FSMTransitionDifference from to)
 
 class (FSM mach, Monad m) => MonadFSM mach m | m -> mach where
     getMachineState :: m (StateType mach)

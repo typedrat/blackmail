@@ -9,7 +9,7 @@ import Control.Monad.State.Class (get, put)
 import Data.Char (toUpper, toLower)
 import Data.Graph.Inductive.Graph hiding ((&))
 import Data.Foldable (foldl')
-import Data.List (elemIndex, nub, nubBy)
+import Data.List (elemIndex, nub, nubBy, (\\))
 import Data.Proxy
 import Language.Haskell.TH
 
@@ -53,6 +53,7 @@ makeStateType (Machine name graph) = do
 
     return ([idTy, stateIdKindInst, dataTy, dataDeriving], [stateType', stateFamInst, initialState', wrapState'])
 
+
 makeEventType :: Machine -> Q ([Dec], [Dec])
 makeEventType (Machine name graph) = do
     -- Make the event id type
@@ -89,6 +90,7 @@ makeEventType (Machine name graph) = do
         wrapEvent' = FunD 'wrapEvent (wrapEventClauses <$> events)
 
     return ([idTy, eventIdKindInst, dataTy, dataDeriving], [eventType', eventFamInst, wrapEvent'])
+
 
 makeOptics :: Machine -> Q [Dec]
 makeOptics (Machine name graph) = do
@@ -150,14 +152,55 @@ makeOptics (Machine name graph) = do
 
     return (classes ++ stateInsts ++ eventInsts)
 
+
+makeTransitionInsts :: Machine -> Q [Dec]
+makeTransitionInsts (Machine mach graph) = do
+    let nodes = labNodes graph
+        getNode n = let Just l = lookup n nodes in l
+
+        transitions = filter (uncurry (/=)) . nub $ (\(f, t, _) -> (getNode f, getNode t)) <$> labEdges graph
+
+        mkInst :: (FSMNode, FSMNode) -> Q Dec
+        mkInst (FSMNode fromN attrs  _, FSMNode toN   attrs' _) = do
+            let machStateT = ConT (mkName $ mach ++ "StateData")
+                stateT name = AppT machStateT (PromotedT (mkName name))
+
+                newAttrs = attrs' \\ attrs
+
+                difference = TySynInstD ''FSMTransitionDifference eqn
+                    where
+                        diff = _aType <$> newAttrs
+                        tup = TupleT (length diff)
+                        val = foldl' AppT tup diff
+                        eqn = TySynEqn [stateT fromN, stateT toN] val
+
+                (inP, newP, outE) = (return in', return new', return out')
+                    where
+                        in'  = ConP (mkName $ fromN ++ "Data") (fmap attrPat attrs)
+                        new' = TupP (fmap attrPat newAttrs)
+                        out' = foldl' AppE (ConE . mkName $ toN ++ "Data") (fmap attrExp attrs')
+
+                        attrPat = VarP . mkName . _aName
+                        attrExp = VarE . mkName . _aName
+                fName = return (VarP '_transition)
+
+            [mapF] <- [d| $fName = setting (\f ($inP) -> let $newP = f () in $outE) |]
+
+            let decl = InstanceD Nothing [] (AppT (AppT (ConT ''FSMTransitionable) (stateT fromN)) (stateT toN)) [difference, mapF]
+
+            return decl
+
+    mapM mkInst transitions
+
 reifyFSM :: Machine -> Q [Dec]
 reifyFSM machine@(Machine mach gr) = do
     let machineN = mkName mach
         machineT = DataD [] machineN [] Nothing [] []
 
-    (stateTy, stateClsMems) <- makeStateType machine
-    (eventTy, eventClsMems) <- makeEventType machine
-    optics       <- makeOptics    machine
+    (stateTy, stateClsMems) <- makeStateType       machine
+    (eventTy, eventClsMems) <- makeEventType       machine
+    optics                  <- makeOptics          machine
+    transitionInsts         <- makeTransitionInsts machine
 
     eventN <- newName "event"
     stateN <- newName "state"
@@ -173,7 +216,7 @@ reifyFSM machine@(Machine mach gr) = do
                 Just (FSMNode to   _ _) = lookup toId nodes
                 toN = mkName to
 
-    return ([machineT] ++ stateTy ++ eventTy ++ optics ++ (validTrans <$> nub edges) ++ instDecl)
+    return ([machineT] ++ stateTy ++ eventTy ++ optics ++ (validTrans <$> nub edges) ++ instDecl ++ transitionInsts)
 
 -- | Generates the wide variety of types and type class instances that are required to fully define the function of the FSM.
 makeFSMTypes :: String -> DefnM a -> Q [Dec]
