@@ -12,10 +12,6 @@ import Data.Foldable (foldl')
 import Data.List (elemIndex, nub, nubBy)
 import Data.Proxy
 import Language.Haskell.TH
-import qualified Language.Haskell.TH.Syntax as TH
-import System.Directory (doesDirectoryExist, doesFileExist,
-                         getDirectoryContents, canonicalizePath)
-import System.FilePath ((</>), takeDirectory, takeExtension)
 
 --
 
@@ -182,28 +178,3 @@ reifyFSM machine@(Machine mach gr) = do
 -- | Generates the wide variety of types and type class instances that are required to fully define the function of the FSM.
 makeFSMTypes :: String -> DefnM a -> Q [Dec]
 makeFSMTypes name defn = reifyFSM =<< makeMachine name defn
-
--- The following function is taken from @file-embed@ by Michael Snoyman.
---
--- It is used under the terms of the three-clause BSD license.
-makeRelativeToProject :: FilePath -> Q FilePath
-makeRelativeToProject rel = do
-    loc <- location
-    runIO $ do
-        srcFP <- canonicalizePath $ loc_filename loc
-        mdir <- findProjectDir srcFP
-        case mdir of
-            Nothing -> fail $ "Could not find .cabal file for path: " ++ srcFP
-            Just dir -> return $ dir </> rel
-    where
-        findProjectDir x = do
-            let dir = takeDirectory x
-            if dir == x
-                then return Nothing
-                else do
-                    contents <- getDirectoryContents dir
-                    if any isCabalFile contents
-                        then return (Just dir)
-                        else findProjectDir dir
-
-        isCabalFile fp = takeExtension fp == ".cabal"
