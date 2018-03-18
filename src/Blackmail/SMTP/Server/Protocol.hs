@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-module Blackmail.SMTP.Protocol (module Blackmail.SMTP.StateMachine, smtpConduit, smtpParser, smtpProtocol, smtpEncoder) where
+module Blackmail.SMTP.Server.Protocol (module Blackmail.SMTP.Server.StateMachine, smtpConduit, smtpParser, smtpProtocol, smtpEncoder) where
 
 import Control.Concurrent (killThread, myThreadId)
 import Control.Lens
@@ -21,10 +21,10 @@ import Network.HostName
 import Network.Socket.SockAddr
 
 import Blackmail.SMTP.Address
-import Blackmail.SMTP.Config
-import Blackmail.SMTP.Monad
-import Blackmail.SMTP.StateMachine
-import Blackmail.SMTP.WireProtocol
+import Blackmail.SMTP.Server.Config
+import Blackmail.SMTP.Server.Monad
+import Blackmail.SMTP.Server.StateMachine
+import Blackmail.SMTP.Server.WireProtocol
 
 --
 

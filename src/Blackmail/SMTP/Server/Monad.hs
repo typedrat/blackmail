@@ -1,4 +1,4 @@
-module Blackmail.SMTP.Monad (module Control.FSM.Monad) where
+module Blackmail.SMTP.Server.Monad (module Control.FSM.Monad) where
 
 import Control.FSM.Monad
 import Control.FSM.Monad.Internal
@@ -7,8 +7,6 @@ import Control.Monad.Logger
 import Control.Monad.Trans
 import Control.Monad.Trans.Resource
 import Data.Conduit
-
-import Blackmail.SMTP.StateMachine
 
 instance (MonadFSM mach m) => MonadFSM mach (ConduitT i o m) where
     getMachineState = lift getMachineState

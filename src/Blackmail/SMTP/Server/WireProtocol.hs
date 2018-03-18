@@ -1,4 +1,4 @@
-module Blackmail.SMTP.WireProtocol (msgP, SMTPResponse(..), responseToBS) where
+module Blackmail.SMTP.Server.WireProtocol (msgP, SMTPResponse(..), responseToBS) where
 
 import Control.Applicative
 import Control.FSM.Monad
@@ -9,7 +9,7 @@ import Data.Functor
 import Data.Semigroup
 
 import Blackmail.SMTP.Address
-import Blackmail.SMTP.StateMachine
+import Blackmail.SMTP.Server.StateMachine
 
 --
 

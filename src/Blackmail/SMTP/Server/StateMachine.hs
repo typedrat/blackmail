@@ -1,4 +1,4 @@
-module Blackmail.SMTP.StateMachine (SMTP(..), SMTPStateId(..), SMTPStateData(..), StateType(..), SMTPEventId(..), SMTPEventData(..), EventType(..), SMTPHasSockAddr(..), SMTPHasClientName(..), SMTPHasSender(..), SMTPHasRecipients(..), SMTPHasRecipient(..), SMTPHasBody(..)) where
+module Blackmail.SMTP.Server.StateMachine (SMTP(..), SMTPStateId(..), SMTPStateData(..), StateType(..), SMTPEventId(..), SMTPEventData(..), EventType(..), SMTPHasSockAddr(..), SMTPHasClientName(..), SMTPHasSender(..), SMTPHasRecipients(..), SMTPHasRecipient(..), SMTPHasBody(..)) where
 
 import Control.FSM.TH
 import Control.FSM.Monad

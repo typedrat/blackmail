@@ -1,4 +1,4 @@
-module Blackmail.Server (runServer, module Blackmail.SMTP.Config) where
+module Blackmail.SMTP.Server (runSMTPServer, module Blackmail.SMTP.Server.Config) where
 
 import Control.Lens
 import Control.Monad
@@ -14,9 +14,9 @@ import Data.Time.Format
 import Network.Socket.SockAddr
 import UnliftIO
 
-import Blackmail.SMTP.Config
-import Blackmail.SMTP.Monad
-import Blackmail.SMTP.Protocol
+import Blackmail.SMTP.Server.Config
+import Blackmail.SMTP.Server.Monad
+import Blackmail.SMTP.Server.Protocol
 
 --
 
@@ -33,8 +33,8 @@ mkLogFn = do
 
         f defaultLoc "" lvl (toLogStr msg')
 
-runServer :: (MonadUnliftIO m) => Settings m -> m ()
-runServer settings = withRunInIO $ \run -> do
+runSMTPServer :: (MonadUnliftIO m) => Settings m -> m ()
+runSMTPServer settings = withRunInIO $ \run -> do
     let host' = settings ^. host
         filter _ lvl = lvl /= LevelDebug || settings ^. showDebuggingLogs
         runFilteredLogger = runStderrLoggingT . filterLogger filter

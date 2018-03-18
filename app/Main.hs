@@ -7,7 +7,7 @@ import System.Directory
 import System.Environment
 import System.FilePath
 
-import Blackmail.Server
+import Blackmail.SMTP.Server
 
 main :: IO ()
 main = do
@@ -23,5 +23,5 @@ main = do
 
     cfg <- loadYamlSettings files defaultSettings useEnv
 
-    runServer cfg
+    runSMTPServer cfg
     return ()

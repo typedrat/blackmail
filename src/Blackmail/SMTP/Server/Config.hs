@@ -1,4 +1,4 @@
-module Blackmail.SMTP.Config (NetworkSettings(), Handlers(), rebaseHandlers, Settings(), Mail(..), HasNetworkSettings(..), HasHandlers(..), HasSettings(..), defaultHandlers, defaultSettings) where
+module Blackmail.SMTP.Server.Config (NetworkSettings(), Handlers(), rebaseHandlers, Settings(), Mail(..), HasNetworkSettings(..), HasHandlers(..), HasSettings(..), defaultHandlers, defaultSettings) where
 
 import Control.Lens hiding ((.=))
 import Data.Conduit.Network
